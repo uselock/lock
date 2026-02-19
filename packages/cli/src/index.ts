@@ -12,6 +12,9 @@ import { linkCommand } from './commands/link.js';
 import { searchCommand } from './commands/search.js';
 import { checkCommand } from './commands/check.js';
 import { exportCommand } from './commands/export.js';
+import { loginCommand } from './commands/login.js';
+import { logoutCommand } from './commands/logout.js';
+import { whoamiCommand } from './commands/whoami.js';
 
 const program = new Command();
 
@@ -32,6 +35,9 @@ program.addCommand(linkCommand);
 program.addCommand(searchCommand);
 program.addCommand(checkCommand);
 program.addCommand(exportCommand);
+program.addCommand(loginCommand);
+program.addCommand(logoutCommand);
+program.addCommand(whoamiCommand);
 
 // Default action: if the first argument doesn't match a known subcommand,
 // treat it as a shorthand for `lock commit "message"`.

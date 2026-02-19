@@ -1,5 +1,5 @@
 {
-  "name": "@lock/slack",
+  "name": "@uselock/slack",
   "version": "0.1.0",
   "private": true,
   "type": "module",

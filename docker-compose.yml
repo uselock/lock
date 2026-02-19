@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -13,6 +11,34 @@ services:
     volumes:
       - lock_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lock"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  lock:
+    build: .
+    container_name: lock-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://lock:lock@postgres:5432/lock
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: lock
+      API_PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      LOCK_API_URL: http://localhost:3000
+    restart: unless-stopped
 
 volumes:
   lock_data:

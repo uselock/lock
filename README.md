@@ -123,7 +123,7 @@ After creating the app, install it to your workspace and copy the tokens into `.
 Build the CLI and link it globally:
 
 ```bash
-pnpm --filter @lock/cli build
+pnpm --filter @uselock/cli build
 cd packages/cli && pnpm link --global
 ```
 

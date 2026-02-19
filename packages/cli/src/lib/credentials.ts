@@ -38,6 +38,24 @@ export async function getCredentials(): Promise<Credentials> {
   return creds;
 }
 
+export function credentialsExist(): boolean {
+  try {
+    const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
+    const creds = JSON.parse(raw);
+    return Boolean(creds.api_url && creds.api_key);
+  } catch {
+    return false;
+  }
+}
+
+export function deleteCredentials(): void {
+  try {
+    fs.unlinkSync(CREDENTIALS_PATH);
+  } catch {
+    // File doesn't exist — no-op
+  }
+}
+
 export async function saveCredentials(creds: Credentials): Promise<void> {
   if (!fs.existsSync(CREDENTIALS_DIR)) {
     fs.mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });

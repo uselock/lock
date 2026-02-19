@@ -22,7 +22,7 @@ Add to your project's `.mcp.json` or global MCP config:
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@lock/mcp-server"],
+      "args": ["@uselock/mcp-server"],
       "env": {
         "LOCK_API_URL": "https://your-lock-instance.com",
         "LOCK_API_KEY": "lk_your_api_key"
@@ -41,7 +41,7 @@ Add to your Cursor MCP settings:
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@lock/mcp-server"],
+      "args": ["@uselock/mcp-server"],
       "env": {
         "LOCK_API_URL": "https://your-lock-instance.com",
         "LOCK_API_KEY": "lk_your_api_key"

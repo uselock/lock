@@ -529,7 +529,7 @@ The MCP server is a thin wrapper that calls the Core API via HTTP. Auth is via A
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@lock/mcp-server"],
+      "args": ["@uselock/mcp-server"],
       "env": {
         "LOCK_API_URL": "https://api.lock.app",
         "LOCK_API_KEY": "lk_a7f3e2..."

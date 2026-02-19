@@ -5,7 +5,7 @@ The Lock CLI integrates decision tracking into your developer workflow. Record d
 ## Installation
 
 ```bash
-npm install -g @lock/cli
+npm install -g @uselock/cli
 ```
 
 Requires Node.js 20 or later.

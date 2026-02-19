@@ -54,7 +54,7 @@ Learn more in [Core Concepts](/docs/concepts).
 
 ```bash
 # Install
-npm install -g @lock/cli
+npm install -g @uselock/cli
 
 # Authenticate
 lock init --product my-product --feature my-feature
@@ -72,7 +72,7 @@ Add Lock to your Claude Code or Cursor config:
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@lock/mcp-server"],
+      "args": ["@uselock/mcp-server"],
       "env": {
         "LOCK_API_URL": "https://your-lock-instance.com",
         "LOCK_API_KEY": "lk_your_api_key"
