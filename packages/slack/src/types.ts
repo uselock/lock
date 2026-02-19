@@ -8,7 +8,9 @@ export interface ParsedCommand {
     | 'link'
     | 'search'
     | 'describe'
+    | 'recap'
     | 'commit';
+  mode: 'explicit' | 'extract' | 'polish';
   message: string;
   flags: {
     scope?: 'minor' | 'major' | 'architectural';

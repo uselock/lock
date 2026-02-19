@@ -9,7 +9,14 @@ import { handleFeatures } from './commands/features.js';
 import { handleRevert } from './commands/revert.js';
 import { handleLink } from './commands/link.js';
 import { handleSearch } from './commands/search.js';
+import { handleRecap } from './commands/recap.js';
 import { formatError } from './lib/formatters.js';
+import { registerConfirmCommit } from './actions/confirm-commit.js';
+import { registerEditDecision } from './actions/edit-decision.js';
+import { registerCancelExtract } from './actions/cancel-extract.js';
+import { registerChangeScope } from './actions/change-scope.js';
+import { registerAddLink } from './actions/add-link.js';
+import { registerAddTags } from './actions/add-tags.js';
 
 const LOCK_API_URL = process.env.LOCK_API_URL || 'http://localhost:3000';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
@@ -138,6 +145,10 @@ app.event('app_mention', async ({ event, client, say }) => {
         blocks = await handleSearch(command, teamCallApi);
         break;
 
+      case 'recap':
+        blocks = await handleRecap(command, channelId, teamCallApi);
+        break;
+
       case 'describe':
         blocks = await handleDescribe(command, teamCallApi);
         break;
@@ -220,6 +231,18 @@ async function handleDescribe(command: any, callApi: Function): Promise<any[]> {
     'Please specify `--product <slug>` or `--feature <slug>` to describe.\nUsage: `@lock describe --product trading "Core trading platform"`',
   );
 }
+
+// Register interactive action handlers
+// Use a non-team-scoped callApi for action handlers (team ID comes from the action context)
+const globalCallApi = (method: string, path: string, body?: any) =>
+  callApi(method, path, body);
+
+registerConfirmCommit(app, globalCallApi);
+registerEditDecision(app, globalCallApi);
+registerCancelExtract(app);
+registerChangeScope(app, globalCallApi);
+registerAddLink(app, globalCallApi);
+registerAddTags(app, globalCallApi);
 
 // Start the app
 (async () => {

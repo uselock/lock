@@ -14,11 +14,15 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude='**/e2e/**'",
+    "test:e2e": "vitest run packages/core/src/e2e/"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
   },
   "engines": {
     "node": ">=20.0.0",

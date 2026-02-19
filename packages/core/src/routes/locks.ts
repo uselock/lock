@@ -6,7 +6,9 @@ import {
   revertLock,
   addLink,
   searchLocks,
+  updateLockMetadata,
 } from '../services/lock-service.js';
+import { extractFromThread, type ExtractRequest } from '../services/extract-service.js';
 import { getLineage } from '../services/lineage-service.js';
 import type {
   CreateLockRequest,
@@ -45,6 +47,27 @@ export async function lockRoutes(fastify: FastifyInstance) {
     return { data: result };
   });
 
+  // Extract a decision from thread context (LLM-powered)
+  fastify.post('/extract', async (request, reply) => {
+    const body = request.body as ExtractRequest;
+
+    if (!body.thread_context) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'thread_context is required' },
+      });
+    }
+
+    try {
+      const result = await extractFromThread(body);
+      return { data: result };
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({
+        error: { code: 'EXTRACTION_FAILED', message: err.message },
+      });
+    }
+  });
+
   // Search locks
   fastify.post('/search', async (request) => {
     const body = request.body as SearchLocksRequest;
@@ -62,6 +85,35 @@ export async function lockRoutes(fastify: FastifyInstance) {
       });
     }
     return { data: { lock } };
+  });
+
+  // Update lock metadata (scope, tags)
+  fastify.patch('/:shortId', async (request, reply) => {
+    const { shortId } = request.params as { shortId: string };
+    const body = request.body as { scope?: string; tags?: string[] };
+
+    if (!body.scope && !body.tags) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'At least one of scope or tags is required' },
+      });
+    }
+
+    try {
+      const result = await updateLockMetadata(shortId, {
+        scope: body.scope as any,
+        tags: body.tags,
+      });
+      if (!result) {
+        return reply.status(404).send({
+          error: { code: 'LOCK_NOT_FOUND', message: `Lock "${shortId}" not found` },
+        });
+      }
+      return { data: { lock: result } };
+    } catch (err: any) {
+      return reply.status(400).send({
+        error: { code: 'UPDATE_FAILED', message: err.message },
+      });
+    }
   });
 
   // Get lock lineage

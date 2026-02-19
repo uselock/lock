@@ -9,6 +9,7 @@ const KNOWN_SUBCOMMANDS = [
   'link',
   'search',
   'describe',
+  'recap',
 ] as const;
 
 const SCOPE_VALUES = ['minor', 'major', 'architectural'] as const;
@@ -74,6 +75,36 @@ function tokenize(input: string): string[] {
   return tokens;
 }
 
+// Patterns for extract mode: bare mention, "this", "that", "it", or "lock this/that/it"
+const EXTRACT_PATTERN = /^(lock\s+)?(this|that|it)(\s|$)/i;
+
+// Patterns for polish mode: "the fact that ...", "the decision that ..."
+const POLISH_PATTERN = /^(lock\s+)?the\s+(fact|decision)\s+that\s+/i;
+
+/**
+ * Detect the commit mode based on the stripped text (after bot mention removal).
+ * Returns the mode and the cleaned message for polish mode.
+ */
+function detectMode(text: string): { mode: ParsedCommand['mode']; cleanedText: string } {
+  // Empty text → extract mode
+  if (!text || text.trim().length === 0) {
+    return { mode: 'extract', cleanedText: '' };
+  }
+
+  // "this", "that", "it", or "lock this/that/it"
+  if (EXTRACT_PATTERN.test(text)) {
+    return { mode: 'extract', cleanedText: '' };
+  }
+
+  // "the fact that ..." or "the decision that ..."
+  if (POLISH_PATTERN.test(text)) {
+    const cleaned = text.replace(POLISH_PATTERN, '').trim();
+    return { mode: 'polish', cleanedText: cleaned };
+  }
+
+  return { mode: 'explicit', cleanedText: text };
+}
+
 /**
  * Parse an @lock mention text into a structured command.
  *
@@ -94,6 +125,7 @@ export function parseCommand(text: string): ParsedCommand {
 
   let subcommand: ParsedCommand['subcommand'] = 'commit';
   let subcommandFound = false;
+  let mode: ParsedCommand['mode'] = 'explicit';
 
   let i = 0;
 
@@ -164,9 +196,22 @@ export function parseCommand(text: string): ParsedCommand {
     i++;
   }
 
+  // Detect mode only for commit subcommand
+  let message = messageParts.join(' ');
+  if (subcommand === 'commit') {
+    const detected = detectMode(message);
+    mode = detected.mode;
+    if (mode === 'polish') {
+      message = detected.cleanedText;
+    } else if (mode === 'extract') {
+      message = '';
+    }
+  }
+
   return {
     subcommand,
-    message: messageParts.join(' '),
+    mode,
+    message,
     flags,
     args: positionalArgs,
   };

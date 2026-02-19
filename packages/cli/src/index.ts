@@ -10,6 +10,7 @@ import { showCommand } from './commands/show.js';
 import { revertCommand } from './commands/revert.js';
 import { linkCommand } from './commands/link.js';
 import { searchCommand } from './commands/search.js';
+import { checkCommand } from './commands/check.js';
 import { exportCommand } from './commands/export.js';
 
 const program = new Command();
@@ -29,6 +30,7 @@ program.addCommand(showCommand);
 program.addCommand(revertCommand);
 program.addCommand(linkCommand);
 program.addCommand(searchCommand);
+program.addCommand(checkCommand);
 program.addCommand(exportCommand);
 
 // Default action: if the first argument doesn't match a known subcommand,

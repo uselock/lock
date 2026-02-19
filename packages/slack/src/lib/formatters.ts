@@ -6,7 +6,149 @@
  */
 
 /**
+ * Build the enrichment actions block appended to committed locks.
+ * Includes scope dropdown, add-jira, add-figma, and add-tags buttons.
+ */
+function buildEnrichmentActions(shortId: string, currentScope: string): any {
+  return {
+    type: 'actions',
+    block_id: `enrichment_${shortId}`,
+    elements: [
+      {
+        type: 'static_select',
+        action_id: 'change_scope',
+        placeholder: { type: 'plain_text', text: 'Change scope' },
+        initial_option: {
+          text: { type: 'plain_text', text: currentScope },
+          value: JSON.stringify({ short_id: shortId, scope: currentScope }),
+        },
+        options: [
+          { text: { type: 'plain_text', text: 'minor' }, value: JSON.stringify({ short_id: shortId, scope: 'minor' }) },
+          { text: { type: 'plain_text', text: 'major' }, value: JSON.stringify({ short_id: shortId, scope: 'major' }) },
+          { text: { type: 'plain_text', text: 'architectural' }, value: JSON.stringify({ short_id: shortId, scope: 'architectural' }) },
+        ],
+      },
+      {
+        type: 'button',
+        action_id: 'add_link_jira',
+        text: { type: 'plain_text', text: 'Add Jira' },
+        value: shortId,
+      },
+      {
+        type: 'button',
+        action_id: 'add_link_figma',
+        text: { type: 'plain_text', text: 'Add Figma' },
+        value: shortId,
+      },
+      {
+        type: 'button',
+        action_id: 'add_tags',
+        text: { type: 'plain_text', text: 'Add tags' },
+        value: shortId,
+      },
+    ],
+  };
+}
+
+/**
+ * Format the extraction preview with [Commit] [Edit] [Cancel] buttons.
+ */
+export function formatExtractionPreview(extraction: any, metadata: any): any[] {
+  const blocks: any[] = [];
+
+  const scopeEmoji =
+    extraction.scope === 'architectural' ? ':rotating_light:' :
+    extraction.scope === 'major' ? ':large_orange_diamond:' :
+    ':small_blue_diamond:';
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `:mag: *Decision extracted* — please confirm`,
+    },
+  });
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `> ${extraction.decision}`,
+    },
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `${scopeEmoji} *${extraction.scope}* | Confidence: ${Math.round(extraction.confidence * 100)}%${extraction.tags?.length ? ` | Tags: ${extraction.tags.map((t: string) => `\`${t}\``).join(' ')}` : ''}`,
+      },
+    ],
+  });
+
+  if (extraction.reasoning) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `_${extraction.reasoning}_`,
+        },
+      ],
+    });
+  }
+
+  // Pack metadata into button values (truncate context to stay under 2000 chars)
+  const commitPayload = {
+    decision: extraction.decision,
+    scope: extraction.scope,
+    tags: extraction.tags,
+    product: metadata.product,
+    feature: metadata.feature,
+    author: metadata.author,
+    source: metadata.source,
+  };
+  let commitValue = JSON.stringify(commitPayload);
+  // Truncate source context if payload too long
+  if (commitValue.length > 1900 && commitPayload.source?.context) {
+    commitPayload.source.context = commitPayload.source.context.slice(0, 200) + '...';
+    commitValue = JSON.stringify(commitPayload);
+  }
+
+  blocks.push({
+    type: 'actions',
+    block_id: 'extraction_actions',
+    elements: [
+      {
+        type: 'button',
+        action_id: 'confirm_commit',
+        text: { type: 'plain_text', text: 'Commit' },
+        style: 'primary',
+        value: commitValue,
+      },
+      {
+        type: 'button',
+        action_id: 'edit_decision',
+        text: { type: 'plain_text', text: 'Edit' },
+        value: commitValue,
+      },
+      {
+        type: 'button',
+        action_id: 'cancel_extract',
+        text: { type: 'plain_text', text: 'Cancel' },
+        style: 'danger',
+        value: 'cancel',
+      },
+    ],
+  });
+
+  return blocks;
+}
+
+/**
  * Format a committed lock with conflicts and supersession info.
+ * Includes enrichment action buttons for scope/link/tag changes.
  */
 export function formatLockCommit(data: any): any[] {
   const { lock, conflicts, supersession } = data;
@@ -93,6 +235,9 @@ export function formatLockCommit(data: any): any[] {
       });
     }
   }
+
+  // Enrichment actions
+  blocks.push(buildEnrichmentActions(lock.short_id, lock.scope));
 
   return blocks;
 }
@@ -232,6 +377,89 @@ export function formatFeatureList(features: any[]): any[] {
         text: `*${feature.name}* (\`${productSlug}/${feature.slug}\`) — ${lockCount} lock${lockCount === 1 ? '' : 's'}${description}`,
       },
     });
+  }
+
+  return blocks;
+}
+
+/**
+ * Format a recap of active decisions grouped by feature.
+ */
+export function formatRecap(locks: any[], productSlug: string): any[] {
+  const blocks: any[] = [];
+
+  if (locks.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: ':mag: No active decisions found.',
+      },
+    });
+    return blocks;
+  }
+
+  // Group locks by feature slug
+  const byFeature = new Map<string, { name: string; slug: string; locks: any[] }>();
+  for (const lock of locks) {
+    const slug = lock.feature?.slug || lock.feature || 'unknown';
+    const name = lock.feature?.name || slug;
+    if (!byFeature.has(slug)) {
+      byFeature.set(slug, { name, slug, locks: [] });
+    }
+    byFeature.get(slug)!.locks.push(lock);
+  }
+
+  // Sort locks within each feature by scope weight: architectural first
+  const scopeWeight: Record<string, number> = { architectural: 0, major: 1, minor: 2 };
+  for (const group of byFeature.values()) {
+    group.locks.sort((a: any, b: any) =>
+      (scopeWeight[a.scope] ?? 2) - (scopeWeight[b.scope] ?? 2),
+    );
+  }
+
+  // Derive product display name from first lock
+  const productName = locks[0]?.product?.name || productSlug;
+
+  // Header
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `:clipboard: *Active Decisions — ${productName}*\n${locks.length} decision${locks.length === 1 ? '' : 's'} across ${byFeature.size} feature${byFeature.size === 1 ? '' : 's'}`,
+    },
+  });
+
+  // Per-feature sections
+  for (const group of byFeature.values()) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${group.name}* (\`${group.slug}\`)`,
+      },
+    });
+
+    for (const lock of group.locks) {
+      const scopeEmoji =
+        lock.scope === 'architectural' ? ':rotating_light:' :
+        lock.scope === 'major' ? ':large_orange_diamond:' :
+        ':small_blue_diamond:';
+
+      const authorName = lock.author?.name || lock.author_name || 'unknown';
+      const date = lock.created_at
+        ? new Date(lock.created_at).toLocaleDateString()
+        : '';
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}\n_${authorName} | ${date}_`,
+        },
+      });
+    }
   }
 
   return blocks;

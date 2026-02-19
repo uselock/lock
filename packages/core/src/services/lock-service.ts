@@ -380,6 +380,50 @@ export async function addLink(shortId: string, req: AddLinkRequest) {
   return { type: link.linkType, ref: link.linkRef };
 }
 
+export async function updateLockMetadata(
+  shortId: string,
+  updates: { scope?: 'minor' | 'major' | 'architectural'; tags?: string[] },
+) {
+  const lock = await db.query.locks.findFirst({
+    where: eq(locks.shortId, shortId),
+  });
+  if (!lock) return null;
+  if (lock.status !== 'active') {
+    throw new Error(`Cannot update lock with status "${lock.status}"`);
+  }
+
+  const setValues: Record<string, any> = {};
+  if (updates.scope) setValues.scope = updates.scope;
+  if (updates.tags) setValues.tags = updates.tags;
+
+  if (Object.keys(setValues).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  const [updated] = await db
+    .update(locks)
+    .set(setValues)
+    .where(eq(locks.id, lock.id))
+    .returning();
+
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, updated.productId),
+  });
+  const feature = await db.query.features.findFirst({
+    where: eq(features.id, updated.featureId),
+  });
+
+  return {
+    short_id: updated.shortId,
+    message: updated.message,
+    scope: updated.scope,
+    tags: updated.tags,
+    status: updated.status,
+    product: product ? { slug: product.slug, name: product.name } : null,
+    feature: feature ? { slug: feature.slug, name: feature.name } : null,
+  };
+}
+
 export async function searchLocks(workspaceId: string, req: SearchLocksRequest) {
   // Text-based fallback search (semantic search works when embeddings are available)
   const conditions: any[] = [
