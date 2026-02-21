@@ -1,5 +1,6 @@
 node_modules/
 dist/
+!actions/check-decisions/dist/
 .env
 *.tsbuildinfo
 .DS_Store

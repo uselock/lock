@@ -26,6 +26,7 @@ export function registerEditDecision(app: any, callApi: Function) {
           author: payload.author,
           source: payload.source,
           response_url: body.response_url,
+          teamId: body.team?.id || '',
         }),
         title: { type: 'plain_text', text: 'Edit Decision' },
         submit: { type: 'plain_text', text: 'Commit' },
@@ -118,7 +119,7 @@ export function registerEditDecision(app: any, callApi: Function) {
     }
 
     try {
-      const response = await callApi('POST', '/api/v1/locks', body);
+      const response = await callApi('POST', '/api/v1/locks', body, metadata.teamId || view.team_id || '');
 
       // Use response_url to update the original message
       if (metadata.response_url) {

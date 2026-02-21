@@ -1,15 +1,17 @@
-import { eq, and, sql, desc, ilike } from 'drizzle-orm';
+import { eq, and, sql, desc, ilike, gte } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { locks, lockLinks, products, features } from '../db/schema.js';
 import { generateShortId } from '../lib/id.js';
 import { detectConflicts } from './conflict-service.js';
 import { notifySlack } from './notify-service.js';
+import { inferDecisionType } from '../lib/llm.js';
 import type {
   CreateLockRequest,
   RevertLockRequest,
   AddLinkRequest,
   ListLocksQuery,
   SearchLocksRequest,
+  DecisionType,
 } from '../types.js';
 
 // Auto-create product/feature by slug (upsert)
@@ -101,15 +103,30 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
     );
   }
 
-  // Run conflict detection
-  const { conflicts, supersession } = await detectConflicts(
-    lock.id,
-    product.id,
-    req.message,
-    req.scope ?? 'minor',
-    req.source.context ?? null,
-    feature.name
-  );
+  // Run conflict detection + type inference in parallel
+  const [conflictResult, typeResult] = await Promise.all([
+    detectConflicts(
+      lock.id,
+      product.id,
+      req.message,
+      req.scope ?? 'minor',
+      req.source.context ?? null,
+      feature.name
+    ),
+    req.decision_type
+      ? Promise.resolve({ decision_type: req.decision_type, confidence: 1 })
+      : inferDecisionType(req.message, req.source.context, req.product, req.feature),
+  ]);
+
+  const { conflicts, supersession } = conflictResult;
+
+  // Update lock with inferred decision type
+  if (typeResult.decision_type) {
+    await db
+      .update(locks)
+      .set({ decisionType: typeResult.decision_type })
+      .where(eq(locks.id, lock.id));
+  }
 
   // Handle supersession
   if (supersession.detected && supersession.supersedes) {
@@ -160,6 +177,7 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
       scope: lock.scope,
       status: lock.status,
       tags: lock.tags,
+      decision_type: typeResult.decision_type || lock.decisionType || null,
       source: {
         type: lock.sourceType,
         ref: lock.sourceRef,
@@ -205,6 +223,7 @@ export async function listLocks(workspaceId: string, query: ListLocksQuery) {
   if (query.scope) conditions.push(eq(locks.scope, query.scope));
   if (query.status) conditions.push(eq(locks.status, query.status));
   if (query.author) conditions.push(eq(locks.authorName, query.author));
+  if (query.decision_type) conditions.push(eq(locks.decisionType, query.decision_type));
 
   const where = and(...conditions);
   const limit = query.limit ?? 20;
@@ -240,6 +259,7 @@ export async function listLocks(workspaceId: string, query: ListLocksQuery) {
         scope: lock.scope,
         status: lock.status,
         tags: lock.tags,
+        decision_type: lock.decisionType,
         created_at: lock.createdAt,
       };
     })
@@ -279,6 +299,7 @@ export async function getLock(shortId: string) {
     scope: lock.scope,
     status: lock.status,
     tags: lock.tags,
+    decision_type: lock.decisionType,
     source: {
       type: lock.sourceType,
       ref: lock.sourceRef,
@@ -382,7 +403,7 @@ export async function addLink(shortId: string, req: AddLinkRequest) {
 
 export async function updateLockMetadata(
   shortId: string,
-  updates: { scope?: 'minor' | 'major' | 'architectural'; tags?: string[] },
+  updates: { scope?: 'minor' | 'major' | 'architectural'; tags?: string[]; decision_type?: DecisionType },
 ) {
   const lock = await db.query.locks.findFirst({
     where: eq(locks.shortId, shortId),
@@ -395,6 +416,7 @@ export async function updateLockMetadata(
   const setValues: Record<string, any> = {};
   if (updates.scope) setValues.scope = updates.scope;
   if (updates.tags) setValues.tags = updates.tags;
+  if (updates.decision_type) setValues.decisionType = updates.decision_type;
 
   if (Object.keys(setValues).length === 0) {
     throw new Error('No valid fields to update');
@@ -418,6 +440,7 @@ export async function updateLockMetadata(
     message: updated.message,
     scope: updated.scope,
     tags: updated.tags,
+    decision_type: updated.decisionType,
     status: updated.status,
     product: product ? { slug: product.slug, name: product.name } : null,
     feature: feature ? { slug: feature.slug, name: feature.name } : null,
@@ -483,6 +506,7 @@ export async function searchLocks(workspaceId: string, req: SearchLocksRequest) 
         feature: { slug: r.feature_slug, name: r.feature_name },
         scope: r.scope,
         status: r.status,
+        decision_type: r.decision_type,
         similarity: r.similarity,
         created_at: r.created_at,
       })),
@@ -512,10 +536,119 @@ export async function searchLocks(workspaceId: string, req: SearchLocksRequest) 
         feature: feature ? { slug: feature.slug, name: feature.name } : null,
         scope: lock.scope,
         status: lock.status,
+        decision_type: lock.decisionType,
         created_at: lock.createdAt,
       };
     })
   );
 
   return { locks: enriched };
+}
+
+export interface RecapQuery {
+  product?: string;
+  since?: string;
+  limit?: number;
+}
+
+export async function getRecap(workspaceId: string, query: RecapQuery) {
+  const conditions: any[] = [eq(locks.workspaceId, workspaceId)];
+
+  // Date filter
+  const sinceDate = query.since
+    ? new Date(query.since)
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  conditions.push(gte(locks.createdAt, sinceDate));
+
+  if (query.product) {
+    const product = await db.query.products.findFirst({
+      where: and(eq(products.workspaceId, workspaceId), eq(products.slug, query.product)),
+    });
+    if (product) conditions.push(eq(locks.productId, product.id));
+    else return {
+      period: { from: sinceDate.toISOString(), to: new Date().toISOString() },
+      summary: { total_decisions: 0, by_scope: {}, by_type: {}, by_product: [], reverts: 0, supersessions: 0 },
+      decisions: [],
+      top_contributors: [],
+    };
+  }
+
+  const where = and(...conditions);
+  const limit = query.limit ?? 100;
+
+  const rows = await db
+    .select()
+    .from(locks)
+    .where(where ?? undefined)
+    .orderBy(desc(locks.createdAt))
+    .limit(limit);
+
+  // Enrich and aggregate
+  const byScope: Record<string, number> = {};
+  const byType: Record<string, number> = {};
+  const byProductMap = new Map<string, { slug: string; name: string; count: number }>();
+  const contributorMap = new Map<string, number>();
+  let reverts = 0;
+  let supersessions = 0;
+
+  const enriched = await Promise.all(
+    rows.map(async (lock) => {
+      const product = await db.query.products.findFirst({
+        where: eq(products.id, lock.productId),
+      });
+      const feature = await db.query.features.findFirst({
+        where: eq(features.id, lock.featureId),
+      });
+
+      // Aggregate
+      byScope[lock.scope] = (byScope[lock.scope] || 0) + 1;
+      if (lock.decisionType) {
+        byType[lock.decisionType] = (byType[lock.decisionType] || 0) + 1;
+      }
+      if (product) {
+        const existing = byProductMap.get(product.slug);
+        if (existing) existing.count++;
+        else byProductMap.set(product.slug, { slug: product.slug, name: product.name, count: 1 });
+      }
+      contributorMap.set(lock.authorName, (contributorMap.get(lock.authorName) || 0) + 1);
+      if (lock.status === 'reverted') reverts++;
+      if (lock.supersedesId) supersessions++;
+
+      return {
+        short_id: lock.shortId,
+        message: lock.message,
+        product: product ? { slug: product.slug, name: product.name } : null,
+        feature: feature ? { slug: feature.slug, name: feature.name } : null,
+        author: {
+          type: lock.authorType,
+          name: lock.authorName,
+          source: lock.authorSource,
+        },
+        scope: lock.scope,
+        status: lock.status,
+        tags: lock.tags,
+        decision_type: lock.decisionType,
+        created_at: lock.createdAt,
+      };
+    })
+  );
+
+  const topContributors = [...contributorMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  return {
+    period: { from: sinceDate.toISOString(), to: new Date().toISOString() },
+    summary: {
+      total_decisions: rows.length,
+      by_scope: byScope,
+      by_type: byType,
+      by_product: [...byProductMap.values()],
+      reverts,
+      supersessions,
+    },
+    decisions: enriched,
+    top_contributors: topContributors,
+  };
 }

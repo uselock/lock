@@ -15,18 +15,23 @@ export function registerQuery(server: McpServer): void {
         .enum(['minor', 'major', 'architectural'])
         .optional()
         .describe('Scope to filter by'),
+      decision_type: z
+        .enum(['product', 'technical', 'business', 'design', 'process'])
+        .optional()
+        .describe('Decision type to filter by'),
       status: z
         .enum(['active', 'superseded', 'reverted', 'proposed', 'auto'])
         .optional()
         .describe('Status to filter by'),
       limit: z.number().optional().describe('Maximum number of results to return'),
     },
-    async ({ product, feature, tags, scope, status, limit }) => {
+    async ({ product, feature, tags, scope, decision_type, status, limit }) => {
       try {
         const params = new URLSearchParams();
         if (product) params.set('product', product);
         if (feature) params.set('feature', feature);
         if (scope) params.set('scope', scope);
+        if (decision_type) params.set('decision_type', decision_type);
         if (status) params.set('status', status);
         if (limit !== undefined) params.set('limit', String(limit));
         if (tags && tags.length > 0) {

@@ -1,12 +1,11 @@
 import { formatLockCommit, formatError } from '../lib/formatters.js';
 
 /**
- * Handle [Commit] button press from extraction preview.
- * Parses commit metadata from button value, calls POST /api/v1/locks,
- * and replaces the preview message with the commit result.
+ * Handle [Commit anyway] button from conflict warning.
+ * Commits the decision despite detected conflicts.
  */
-export function registerConfirmCommit(app: any, callApi: Function) {
-  app.action('confirm_commit', async ({ action, ack, respond, body: actionBody }: any) => {
+export function registerForceCommit(app: any, callApi: Function) {
+  app.action('force_commit', async ({ action, ack, respond, body: actionBody }: any) => {
     await ack();
 
     const teamId = actionBody.team?.id || '';
@@ -19,22 +18,8 @@ export function registerConfirmCommit(app: any, callApi: Function) {
       return;
     }
 
-    const body = {
-      message: payload.decision,
-      product: payload.product,
-      feature: payload.feature,
-      scope: payload.scope,
-      tags: payload.tags,
-      author: payload.author,
-      source: payload.source,
-    };
-
-    if (payload.ticket) {
-      (body as any).links = [{ type: 'jira', ref: payload.ticket }];
-    }
-
     try {
-      const response = await callApi('POST', '/api/v1/locks', body, teamId);
+      const response = await callApi('POST', '/api/v1/locks', payload, teamId);
 
       if (response.error) {
         await respond({ blocks: formatError(response.error.code || 'LOCK_FAILED', response.error.message), replace_original: true });
@@ -46,5 +31,13 @@ export function registerConfirmCommit(app: any, callApi: Function) {
     } catch (err: any) {
       await respond({ blocks: formatError('LOCK_FAILED', err.message || 'Failed to commit lock.'), replace_original: true });
     }
+  });
+
+  app.action('cancel_commit', async ({ ack, respond }: any) => {
+    await ack();
+    await respond({
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '_Commit cancelled._' } }],
+      replace_original: true,
+    });
   });
 }

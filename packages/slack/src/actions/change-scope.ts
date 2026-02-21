@@ -3,8 +3,10 @@
  * Calls PATCH /api/v1/locks/:shortId to update scope.
  */
 export function registerChangeScope(app: any, callApi: Function) {
-  app.action('change_scope', async ({ action, ack, respond }: any) => {
+  app.action('change_scope', async ({ action, ack, respond, body: actionBody }: any) => {
     await ack();
+
+    const teamId = actionBody.team?.id || '';
 
     let payload: any;
     try {
@@ -16,7 +18,7 @@ export function registerChangeScope(app: any, callApi: Function) {
     const { short_id, scope } = payload;
 
     try {
-      const response = await callApi('PATCH', `/api/v1/locks/${short_id}`, { scope });
+      const response = await callApi('PATCH', `/api/v1/locks/${short_id}`, { scope }, teamId);
 
       if (response.error) {
         // Don't replace the whole message — just acknowledge silently

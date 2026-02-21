@@ -54,6 +54,24 @@ describe('formatLock', () => {
     expect(result).toContain('l-old111');
   });
 
+  it('shows decision_type when present', () => {
+    const result = formatLock({
+      short_id: 'l-typ123',
+      message: 'Use Redis',
+      scope: 'major',
+      status: 'active',
+      decision_type: 'technical',
+      product: { slug: 'trading', name: 'Trading' },
+      feature: { slug: 'cache', name: 'Cache' },
+      author: { name: 'alice', source: 'slack' },
+      tags: [],
+      links: [],
+      created_at: '2026-01-01T00:00:00Z',
+    });
+    expect(result).toContain('Type:');
+    expect(result).toContain('technical');
+  });
+
   it('handles minimal data without crashing', () => {
     const result = formatLock({
       short_id: 'l-min000',

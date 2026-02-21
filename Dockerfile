@@ -44,8 +44,8 @@ COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY scripts/init-db.sql /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint.sh
 
-# Install pg_isready for health check wait loop
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
+# Install pg_isready for health check wait loop + bash for entrypoint
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client bash && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 3000
 

@@ -27,6 +27,7 @@ export interface Lock {
   scope: 'minor' | 'major' | 'architectural';
   status: 'active' | 'superseded' | 'reverted' | 'proposed' | 'auto';
   tags: string[];
+  decision_type?: string;
   created_at: string;
 }
 

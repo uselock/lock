@@ -1,6 +1,6 @@
 import type { ParsedCommand } from '../types.js';
 import { getThreadContext } from '../lib/thread-context.js';
-import { formatLockCommit, formatExtractionPreview, formatError } from '../lib/formatters.js';
+import { formatLockCommit, formatExtractionPreview, formatError, formatConflictWarning } from '../lib/formatters.js';
 
 interface LockContext {
   channelId: string;
@@ -170,6 +170,12 @@ async function handlePolishMode(
       tags: command.flags.tags.length > 0 ? command.flags.tags : extraction.tags,
     };
 
+    if (command.flags.type) {
+      body.decision_type = command.flags.type;
+    } else if (extraction.decision_type) {
+      body.decision_type = extraction.decision_type;
+    }
+
     if (command.flags.ticket) {
       body.links = [{ type: 'jira', ref: command.flags.ticket }];
     }
@@ -216,11 +222,36 @@ async function handleExplicitMode(
     body.tags = command.flags.tags;
   }
 
+  if (command.flags.type) {
+    body.decision_type = command.flags.type;
+  }
+
   if (command.flags.ticket) {
     body.links = [{ type: 'jira', ref: command.flags.ticket }];
   }
 
   try {
+    // Pre-check for conflicts before committing
+    const preCheck = await ctx.callApi('POST', '/api/v1/locks/pre-check', {
+      message: command.message,
+      product: ctx.product,
+      feature: ctx.feature,
+      scope: command.flags.scope || 'minor',
+    });
+
+    const checkResult = preCheck.data || preCheck;
+    const hasConflicts = (checkResult.conflicts?.length > 0) || checkResult.supersession?.detected;
+
+    if (hasConflicts) {
+      // Show warning with Commit Anyway / Cancel buttons
+      return formatConflictWarning(
+        checkResult.conflicts || [],
+        checkResult.supersession,
+        body,
+      );
+    }
+
+    // No conflicts — commit directly
     const response = await ctx.callApi('POST', '/api/v1/locks', body);
 
     if (response.error) {

@@ -9,6 +9,7 @@ export const commitCommand = new Command('commit')
   .description('Commit a new decision lock')
   .argument('<message>', 'The decision message')
   .option('--scope <scope>', 'Decision scope: minor, major, or architectural', 'minor')
+  .option('--type <type>', 'Decision type: product, technical, business, design, process')
   .option('--tag <tag...>', 'Tags for the decision (repeatable)')
   .option('--ticket <ticket>', 'Link a Jira ticket (e.g. TRADE-442)')
   .action(async (message: string, opts) => {
@@ -38,6 +39,10 @@ export const commitCommand = new Command('commit')
         ref: `cli:${process.cwd()}`,
       },
     };
+
+    if (opts.type) {
+      body.decision_type = opts.type;
+    }
 
     // Add Jira link if --ticket provided
     if (opts.ticket) {

@@ -1,0 +1,18 @@
+{
+  "name": "lock-check-decisions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist --license licenses.txt"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@vercel/ncc": "^0.38.0",
+    "typescript": "^5.4.0"
+  }
+}

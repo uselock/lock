@@ -23,11 +23,11 @@ INPUT SURFACES              CORE                 OUTPUT SURFACES
 │  CLI         │──┼──│  Core Engine   │────│ Slack Notify    │
 └──────────────┘  │  │  (Fastify API) │    └─────────────────┘
 ┌──────────────┐  │  │                │    ┌─────────────────┐
-│  MCP Server  │──┼──│  - decisions   │────│ Jira Sync       │
+│  MCP Server  │──┼──│  - decisions   │────│ Admin UI        │
 │  (agents)    │  │  │  - conflicts   │    └─────────────────┘
-└──────────────┘  │  │  - lineage     │    ┌─────────────────┐
-┌──────────────┐  │  │  - policies    │────│ Webhooks        │
-│  REST API    │──┘  └───────┬────────┘    └─────────────────┘
+└──────────────┘  │  │  - lineage     │
+┌──────────────┐  │  │  - extraction  │
+│  REST API    │──┘  └───────┬────────┘
 └──────────────┘             │
                     ┌────────┴────────┐
                     │   PostgreSQL    │
@@ -39,16 +39,17 @@ INPUT SURFACES              CORE                 OUTPUT SURFACES
 
 | Component     | Technology                  | Notes                                          |
 |---------------|-----------------------------|-------------------------------------------------|
-| Core API      | Node.js + Fastify           | Central REST API, all business logic lives here |
-| Slack Bot     | @slack/bolt                 | Slack event handling, slash commands             |
-| CLI           | Node.js (commander.js)      | Thin client calling the REST API                |
-| MCP Server    | @modelcontextprotocol/sdk   | Exposes Lock tools for AI agents                |
-| Database      | PostgreSQL + pgvector       | Decisions + vector embeddings                   |
-| ORM           | Drizzle ORM                 | Type-safe, lightweight                          |
-| Embeddings    | OpenAI text-embedding-3-small | For conflict detection                        |
-| LLM           | Claude API (claude-sonnet-4-5-20250929) | Conflict classification, supersession inference |
+| Core API      | Node.js + Fastify 5         | Central REST API, all business logic lives here |
+| Slack Bot     | @slack/bolt 4               | Slack event handling via socket mode             |
+| CLI           | Node.js (commander.js 12)   | Thin client calling the REST API                |
+| MCP Server    | @modelcontextprotocol/sdk   | Exposes Lock tools for AI agents (stdio transport) |
+| Database      | PostgreSQL 16 + pgvector    | Decisions + vector embeddings                   |
+| ORM           | Drizzle ORM                 | Type-safe, lightweight. Schema push via drizzle-kit |
+| Embeddings    | OpenAI text-embedding-3-small | For conflict detection + semantic search       |
+| LLM           | OpenAI gpt-4o-mini          | Conflict classification, decision extraction, polish |
 | Runtime       | Node.js 20+                | ESM modules throughout                          |
-| Package mgr   | pnpm                       | Workspace monorepo                              |
+| Package mgr   | pnpm 9+                    | Workspace monorepo                              |
+| Testing       | Vitest                      | Unit + e2e tests                                |
 
 ---
 
@@ -61,449 +62,314 @@ lock/
 ├── CLAUDE.md                          # This file
 ├── pnpm-workspace.yaml
 ├── package.json                       # Root package.json (scripts, shared deps)
+├── tsconfig.base.json                 # Shared TS config (ES2022, ESNext, strict)
+├── vitest.config.ts                   # Test config (packages/*/src/**/*.test.ts)
 ├── .env.example                       # Environment variables template
-├── docker-compose.yml                 # PostgreSQL + pgvector for local dev
+├── docker-compose.yml                 # PostgreSQL + pgvector + Lock app
+├── Dockerfile                         # Multi-stage build (core + slack only)
+├── slack-app-manifest.yml             # Slack app manifest for easy setup
 │
 ├── packages/
 │   ├── core/                          # Core engine — business logic + API
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   ├── src/
-│   │   │   ├── index.ts               # Fastify server entry point
-│   │   │   ├── db/
-│   │   │   │   ├── schema.ts          # Drizzle schema (all tables)
-│   │   │   │   ├── migrate.ts         # Migration runner
-│   │   │   │   └── client.ts          # DB connection
-│   │   │   ├── routes/
-│   │   │   │   ├── locks.ts           # CRUD + commit + revert + search
-│   │   │   │   ├── products.ts        # Product CRUD + list
-│   │   │   │   ├── features.ts        # Feature CRUD + list
-│   │   │   │   └── health.ts          # Health check
-│   │   │   ├── services/
-│   │   │   │   ├── lock-service.ts    # Core decision logic
-│   │   │   │   ├── conflict-service.ts # Embedding + conflict detection
-│   │   │   │   ├── lineage-service.ts # Supersession + revert chains
-│   │   │   │   └── notify-service.ts  # Cross-surface notifications (Slack)
-│   │   │   ├── lib/
-│   │   │   │   ├── embeddings.ts      # OpenAI embedding generation
-│   │   │   │   ├── llm.ts            # Claude API for classification
-│   │   │   │   ├── id.ts             # Short ID generation (l-xxxxxx)
-│   │   │   │   └── auth.ts           # API key validation middleware
-│   │   │   └── types.ts              # Shared TypeScript types
-│   │   └── drizzle/
-│   │       └── migrations/            # SQL migrations
+│   │   ├── package.json               # @uselock/core
+│   │   ├── drizzle.config.ts          # Drizzle Kit config
+│   │   └── src/
+│   │       ├── index.ts               # Fastify server entry point
+│   │       ├── types.ts               # Shared TypeScript types
+│   │       ├── db/
+│   │       │   ├── schema.ts          # Drizzle schema (all tables + pgvector custom type)
+│   │       │   ├── migrate.ts         # Migration runner
+│   │       │   └── client.ts          # DB connection (pg pool + drizzle)
+│   │       ├── routes/
+│   │       │   ├── locks.ts           # CRUD + commit + extract + revert + search + lineage
+│   │       │   ├── products.ts        # Product CRUD + list (with lock_count)
+│   │       │   ├── features.ts        # Feature CRUD + list
+│   │       │   ├── channel-configs.ts # Map Slack channels to product+feature
+│   │       │   ├── health.ts          # GET /health (no auth)
+│   │       │   └── ui.ts             # Admin UI for API key management (no auth)
+│   │       ├── services/
+│   │       │   ├── lock-service.ts    # Core decision logic (commit, list, revert, search, update)
+│   │       │   ├── conflict-service.ts # Embedding + pgvector search + LLM classification
+│   │       │   ├── extract-service.ts # LLM decision extraction from thread context
+│   │       │   ├── lineage-service.ts # Supersession + revert chain traversal
+│   │       │   └── notify-service.ts  # Cross-surface Slack notifications
+│   │       └── lib/
+│   │           ├── embeddings.ts      # OpenAI text-embedding-3-small generation
+│   │           ├── llm.ts            # OpenAI gpt-4o-mini (extraction + classification)
+│   │           ├── id.ts             # Short ID generation (l-xxxxxx)
+│   │           └── auth.ts           # API key + internal secret auth middleware
 │   │
 │   ├── slack/                         # Slack bot surface
-│   │   ├── package.json
-│   │   ├── tsconfig.json
+│   │   ├── package.json               # @uselock/slack
 │   │   └── src/
-│   │       ├── index.ts               # Bolt app entry point
+│   │       ├── index.ts               # Bolt app entry point (socket mode)
+│   │       ├── types.ts               # ParsedCommand, ThreadContext interfaces
 │   │       ├── commands/
-│   │       │   ├── lock.ts            # @lock <message> handler
-│   │       │   ├── init.ts            # @lock init handler
-│   │       │   ├── log.ts             # @lock log handler
-│   │       │   ├── products.ts        # @lock products handler
-│   │       │   ├── features.ts        # @lock features handler
-│   │       │   ├── revert.ts          # @lock revert handler
-│   │       │   └── link.ts            # @lock link handler
-│   │       ├── lib/
-│   │       │   ├── parser.ts          # Parse @lock commands + flags
-│   │       │   ├── thread-context.ts  # Extract thread context from Slack API
-│   │       │   └── formatters.ts      # Format responses as Slack blocks
-│   │       └── types.ts
+│   │       │   ├── lock.ts            # @lock <message> — 3 modes: explicit/extract/polish
+│   │       │   ├── init.ts            # @lock init --product <p> --feature <f>
+│   │       │   ├── log.ts             # @lock log (with filters)
+│   │       │   ├── products.ts        # @lock products
+│   │       │   ├── features.ts        # @lock features
+│   │       │   ├── revert.ts          # @lock revert <id> "reason"
+│   │       │   ├── link.ts            # @lock link <id> <ref>
+│   │       │   ├── search.ts          # @lock search "query"
+│   │       │   └── recap.ts           # @lock recap --product <p>
+│   │       ├── actions/
+│   │       │   ├── confirm-commit.ts  # Confirm extracted decision → commit
+│   │       │   ├── edit-decision.ts   # Edit extracted decision in modal → commit
+│   │       │   ├── cancel-extract.ts  # Cancel extraction
+│   │       │   ├── change-scope.ts    # Change scope via dropdown post-commit
+│   │       │   ├── add-link.ts        # Add Jira/Figma link via modal post-commit
+│   │       │   └── add-tags.ts        # Add tags via modal post-commit
+│   │       └── lib/
+│   │           ├── parser.ts          # Parse @lock commands + flags + detect mode
+│   │           ├── thread-context.ts  # Extract thread context from Slack API
+│   │           └── formatters.ts      # Format responses as Slack Block Kit blocks
 │   │
 │   ├── cli/                           # CLI surface
-│   │   ├── package.json
-│   │   ├── tsconfig.json
+│   │   ├── package.json               # @uselock/cli (bin: "lock")
 │   │   └── src/
-│   │       ├── index.ts               # CLI entry point (commander.js)
+│   │       ├── index.ts               # CLI entry point — "lock <msg>" shorthand for "lock commit <msg>"
+│   │       ├── types.ts               # Credentials, ProjectConfig interfaces
 │   │       ├── commands/
-│   │       │   ├── init.ts            # $ lock init
-│   │       │   ├── commit.ts          # $ lock "message"
-│   │       │   ├── log.ts             # $ lock log
-│   │       │   ├── products.ts        # $ lock products
-│   │       │   ├── features.ts        # $ lock features
-│   │       │   ├── search.ts          # $ lock search "query"
-│   │       │   ├── show.ts            # $ lock show <id>
-│   │       │   ├── revert.ts          # $ lock revert <id>
-│   │       │   └── link.ts            # $ lock link <id> <ref>
-│   │       ├── lib/
-│   │       │   ├── config.ts          # Read/write .lock/config.json
-│   │       │   ├── api-client.ts      # HTTP client for core API
-│   │       │   ├── credentials.ts     # Read/write ~/.lock/credentials
-│   │       │   └── formatters.ts      # Terminal output formatting (chalk)
-│   │       └── types.ts
+│   │       │   ├── commit.ts          # lock "message" (--scope, --tag, --ticket)
+│   │       │   ├── init.ts            # lock init (interactive or --product --feature)
+│   │       │   ├── log.ts             # lock log (--product, --feature, --scope, --status, --limit)
+│   │       │   ├── show.ts            # lock show <id>
+│   │       │   ├── search.ts          # lock search "query"
+│   │       │   ├── check.ts           # lock check "intent" — pre-build constraint check
+│   │       │   ├── revert.ts          # lock revert <id> "reason"
+│   │       │   ├── link.ts            # lock link <id> <ref> (auto-detects link type)
+│   │       │   ├── export.ts          # lock export — generates LOCK.md markdown
+│   │       │   ├── products.ts        # lock products
+│   │       │   ├── features.ts        # lock features
+│   │       │   ├── login.ts           # lock login (--url, --key or interactive)
+│   │       │   ├── logout.ts          # lock logout (--force)
+│   │       │   └── whoami.ts          # lock whoami — shows auth status + connectivity
+│   │       └── lib/
+│   │           ├── config.ts          # Read/write .lock/config.json (project scope)
+│   │           ├── api-client.ts      # HTTP client for core API (apiGet, apiPost, apiPatch)
+│   │           ├── credentials.ts     # Read/write ~/.lock/credentials (0600 perms)
+│   │           └── formatters.ts      # Terminal output formatting (chalk)
 │   │
 │   └── mcp/                           # MCP server surface (for AI agents)
-│       ├── package.json
-│       ├── tsconfig.json
+│       ├── package.json               # @uselock/mcp (bin: "lock-mcp")
 │       └── src/
-│           ├── index.ts               # MCP server entry point
+│           ├── index.ts               # MCP server entry point (stdio transport)
 │           ├── tools/
-│           │   ├── query.ts           # lock.query tool
-│           │   ├── commit.ts          # lock.commit tool
-│           │   ├── list-products.ts   # lock.list_products tool
-│           │   ├── list-features.ts   # lock.list_features tool
-│           │   ├── get.ts             # lock.get tool
-│           │   ├── get-lineage.ts     # lock.get_lineage tool
-│           │   └── search-semantic.ts # lock.search_semantic tool
+│           │   ├── list-products.ts   # lock_list_products
+│           │   ├── list-features.ts   # lock_list_features
+│           │   ├── query.ts           # lock_query (filter by product/feature/scope/status/tags)
+│           │   ├── get.ts             # lock_get (by short ID or UUID)
+│           │   ├── get-lineage.ts     # lock_get_lineage (supersession/revert chain)
+│           │   ├── search-semantic.ts # lock_search_semantic (vector search, returns JSON)
+│           │   ├── commit.ts          # lock_commit (author: MCP Agent)
+│           │   ├── context.ts         # lock_context (all active decisions as markdown)
+│           │   └── check.ts           # lock_check (pre-build constraint check, markdown)
 │           └── lib/
-│               ├── api-client.ts      # HTTP client for core API
-│               └── types.ts
+│               ├── api-client.ts      # HTTP client (apiGet, apiPost)
+│               └── types.ts           # Shared type interfaces
 │
-└── scripts/
-    ├── dev.sh                         # Start all services for local dev
-    └── seed.ts                        # Seed DB with sample data
+├── scripts/
+│   ├── docker-entrypoint.sh           # Waits for PG, runs drizzle-kit push, starts core + slack
+│   └── init-db.sql                    # Enables vector + pgcrypto extensions
+│
+└── docs/                              # Documentation
+    ├── index.md                       # Documentation home / overview
+    ├── concepts.md                    # Core concepts (locks, scopes, statuses, conflict detection)
+    ├── api.md                         # REST API reference
+    ├── slack.md                       # Slack bot reference (3 modes, all commands)
+    ├── cli.md                         # CLI reference (all commands)
+    ├── mcp.md                         # MCP server reference (all tools)
+    ├── self-hosting.md                # Docker + manual deployment guide
+    └── website-brief.md               # Marketing website content brief
 ```
 
 ---
 
 ## Database Schema
 
-Use Drizzle ORM with PostgreSQL. The schema lives in `packages/core/src/db/schema.ts`.
+Drizzle ORM with PostgreSQL. Schema in `packages/core/src/db/schema.ts`. Uses a custom `vector(1536)` type for pgvector.
 
 ### Tables
 
-```sql
--- pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+- **workspaces** — Tenants. Fields: `id` UUID, `slackTeamId` TEXT unique (null for CLI-only), `name`, `createdAt`
+- **products** — Top-level org unit. Fields: `id`, `workspaceId` FK, `slug` TEXT (unique per workspace), `name`, `description`, `createdAt`
+- **features** — Scoped area within a product. Fields: `id`, `productId` FK, `slug` (unique per product), `name`, `description`, `slackChannelId`, `createdAt`
+- **locks** — The core decisions table. Fields: `id`, `shortId` TEXT unique, `workspaceId`/`productId`/`featureId` FKs, `message`, author fields (`authorType`, `authorId`, `authorName`, `authorSource`), classification (`scope`, `status`, `tags`), source context (`sourceType`, `sourceRef`, `sourceContext`, `participants`), lineage (`supersedesId`, `supersededById`, `revertedById` self-referential FKs), `embedding` vector(1536), `createdAt`
+- **lockLinks** — External links. Fields: `id`, `lockId` FK, `linkType` (jira/figma/github/linear/notion/other), `linkRef`, `createdAt`
+- **channelConfigs** — Maps Slack channels to product+feature. Fields: `id`, `workspaceId`, `slackChannelId` unique, `productId`, `featureId`, `createdAt`
+- **apiKeys** — API authentication. Fields: `id`, `workspaceId`, `keyHash` (SHA-256), `keyPrefix` (first 8 chars), `name`, `scopes` (default: read,write), `createdAt`, `lastUsedAt`
 
--- Workspaces (tenants)
-CREATE TABLE workspaces (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slack_team_id TEXT UNIQUE,           -- NULL if CLI-only workspace
-  name TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Products
-CREATE TABLE products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID NOT NULL REFERENCES workspaces(id),
-  slug TEXT NOT NULL,                  -- url-safe identifier (e.g. "trading")
-  name TEXT NOT NULL,                  -- display name
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(workspace_id, slug)
-);
-
--- Features
-CREATE TABLE features (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id UUID NOT NULL REFERENCES products(id),
-  slug TEXT NOT NULL,                  -- url-safe identifier (e.g. "margin-rework")
-  name TEXT NOT NULL,
-  description TEXT,
-  slack_channel_id TEXT,               -- NULL if not linked to a Slack channel
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(product_id, slug)
-);
-
--- Locks (decisions)
-CREATE TABLE locks (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  short_id TEXT NOT NULL UNIQUE,       -- human-readable ID: "l-a7f3e2"
-  workspace_id UUID NOT NULL REFERENCES workspaces(id),
-  product_id UUID NOT NULL REFERENCES products(id),
-  feature_id UUID NOT NULL REFERENCES features(id),
-  message TEXT NOT NULL,               -- the decision statement
-  
-  -- Author
-  author_type TEXT NOT NULL CHECK (author_type IN ('human', 'agent')),
-  author_id TEXT NOT NULL,             -- slack user ID, API key owner, agent name
-  author_name TEXT NOT NULL,           -- display name
-  author_source TEXT NOT NULL CHECK (author_source IN ('slack', 'cli', 'mcp', 'api')),
-  
-  -- Classification
-  scope TEXT NOT NULL DEFAULT 'minor' CHECK (scope IN ('minor', 'major', 'architectural')),
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded', 'reverted', 'proposed', 'auto')),
-  tags TEXT[] DEFAULT '{}',
-  
-  -- Source context
-  source_type TEXT NOT NULL CHECK (source_type IN ('slack', 'cli', 'agent_session', 'api')),
-  source_ref TEXT,                     -- thread URL, session ID, etc.
-  source_context TEXT,                 -- auto-captured surrounding context
-  participants TEXT[] DEFAULT '{}',
-  
-  -- Lineage
-  supersedes_id UUID REFERENCES locks(id),
-  superseded_by_id UUID REFERENCES locks(id),
-  reverted_by_id UUID REFERENCES locks(id),
-  
-  -- Embedding for semantic search
-  embedding vector(1536),              -- OpenAI text-embedding-3-small dimension
-  
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Indexes
-CREATE INDEX idx_locks_workspace ON locks(workspace_id);
-CREATE INDEX idx_locks_product ON locks(product_id);
-CREATE INDEX idx_locks_feature ON locks(feature_id);
-CREATE INDEX idx_locks_status ON locks(status);
-CREATE INDEX idx_locks_short_id ON locks(short_id);
-CREATE INDEX idx_locks_embedding ON locks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
--- External links
-CREATE TABLE lock_links (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  lock_id UUID NOT NULL REFERENCES locks(id),
-  link_type TEXT NOT NULL CHECK (link_type IN ('jira', 'figma', 'github', 'linear', 'notion', 'other')),
-  link_ref TEXT NOT NULL,              -- ticket ID, URL, etc.
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Channel configurations (maps Slack channels to product+feature)
-CREATE TABLE channel_configs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID NOT NULL REFERENCES workspaces(id),
-  slack_channel_id TEXT NOT NULL UNIQUE,
-  product_id UUID NOT NULL REFERENCES products(id),
-  feature_id UUID NOT NULL REFERENCES features(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- API keys
-CREATE TABLE api_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID NOT NULL REFERENCES workspaces(id),
-  key_hash TEXT NOT NULL UNIQUE,       -- SHA-256 hash of the API key
-  key_prefix TEXT NOT NULL,            -- first 8 chars for identification (e.g. "lk_a7f3...")
-  name TEXT NOT NULL,                  -- human-readable name ("philippe's CLI")
-  scopes TEXT[] DEFAULT '{read,write}',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  last_used_at TIMESTAMPTZ
-);
-```
+### Indexes
+workspace, product, feature, status, shortId on locks table.
 
 ---
 
 ## Core API Endpoints
 
-All endpoints are under `/api/v1/`. Authentication is via `Authorization: Bearer <api_key>` header. The Slack bot calls the API internally (no auth needed for internal calls, use a shared secret).
+All endpoints under `/api/v1/` require auth via `Authorization: Bearer <api_key>` or internal auth (`X-Internal-Secret` + `X-Workspace-Team-Id` headers). Unauthenticated routes: `GET /health`, `GET /` (admin UI), `/_ui/*` endpoints.
 
 ### Locks
 
 ```
-POST   /api/v1/locks                  # Commit a new decision
-GET    /api/v1/locks                  # List/filter locks (query params: product, feature, scope, status, author, tags, limit, offset)
-GET    /api/v1/locks/:shortId         # Get a single lock with full detail
-POST   /api/v1/locks/:shortId/revert  # Revert a lock (body: { message, author })
-POST   /api/v1/locks/:shortId/link    # Add a link to a lock (body: { link_type, link_ref })
-POST   /api/v1/locks/search           # Semantic search (body: { query, product?, feature? })
+POST   /api/v1/locks                    # Commit a new decision
+GET    /api/v1/locks                    # List/filter (query: product, feature, scope, status, author, tags, limit, offset)
+POST   /api/v1/locks/extract            # LLM extraction from thread context (body: { thread_context, user_hint?, product?, feature? })
+POST   /api/v1/locks/search             # Semantic search (body: { query, product?, feature? })
+GET    /api/v1/locks/:shortId           # Get single lock with full detail
+PATCH  /api/v1/locks/:shortId           # Update scope and/or tags (only mutable fields)
+GET    /api/v1/locks/:shortId/lineage   # Get supersession/revert chain
+POST   /api/v1/locks/:shortId/revert    # Revert a lock (body: { message, author })
+POST   /api/v1/locks/:shortId/link      # Add external link (body: { link_type, link_ref })
 ```
 
-**POST /api/v1/locks** body:
-```json
-{
-  "message": "Use notional value instead of margin for position display",
-  "product": "trading",
-  "feature": "margin-rework",
-  "scope": "major",
-  "tags": ["display", "margin"],
-  "author": {
-    "type": "human",
-    "id": "U1234567",
-    "name": "philippe",
-    "source": "slack"
-  },
-  "source": {
-    "type": "slack",
-    "ref": "https://ledger.slack.com/archives/C123/p456",
-    "context": "Thread snippet of surrounding discussion...",
-    "participants": ["philippe", "alice", "bob"]
-  },
-  "links": [
-    { "type": "jira", "ref": "TRADE-442" }
-  ]
-}
-```
+**Note:** Route registration order matters — `/extract` and `/search` must be registered before `/:shortId` to avoid route conflicts.
 
-**POST /api/v1/locks** response:
-```json
-{
-  "lock": {
-    "id": "uuid",
-    "short_id": "l-a7f3e2",
-    "message": "Use notional value instead of margin...",
-    "product": { "slug": "trading", "name": "Trading" },
-    "feature": { "slug": "margin-rework", "name": "Margin Rework" },
-    "author": { ... },
-    "scope": "major",
-    "status": "active",
-    "created_at": "2026-02-18T14:32:00Z"
-  },
-  "conflicts": [
-    {
-      "lock": { "short_id": "l-b8c4f1", "message": "Display all values in margin terms", ... },
-      "relationship": "potential_conflict",
-      "explanation": "These decisions contradict each other on what metric to display for positions."
-    }
-  ],
-  "supersession": {
-    "detected": true,
-    "supersedes": { "short_id": "l-x9y2z3", "message": "Use margin for position display" },
-    "explanation": "The new decision directly replaces the approach described in l-x9y2z3."
-  }
-}
-```
-
-### Products
+### Products, Features, Channel Configs
 
 ```
-GET    /api/v1/products               # List all products (with decision counts)
-POST   /api/v1/products               # Create a product
-PATCH  /api/v1/products/:slug         # Update description
+GET/POST         /api/v1/products              # List (with lock_count) / Create
+PATCH            /api/v1/products/:slug         # Update name/description
+GET/POST         /api/v1/features              # List (filter: ?product=slug) / Create
+PATCH            /api/v1/features/:slug         # Update name/description
+POST             /api/v1/channel-configs        # Map channel to product+feature (upserts)
+GET              /api/v1/channel-configs/:channelId  # Get channel config
 ```
 
-### Features
+### Admin UI (no auth)
 
 ```
-GET    /api/v1/features               # List features (query param: product)
-POST   /api/v1/features               # Create a feature
-PATCH  /api/v1/features/:slug         # Update description
+GET    /                               # Self-contained dark-themed HTML page for API key management
+GET    /_ui/workspaces                 # List all workspaces
+GET    /_ui/keys                       # List API keys (prefix only, no secrets)
+POST   /_ui/keys                       # Create API key (returns raw key once)
 ```
 
-### Channel Configs
+### Response Format
 
-```
-POST   /api/v1/channel-configs        # Map a Slack channel to product+feature
-GET    /api/v1/channel-configs/:channelId  # Get config for a channel
-```
+Success: `{ data: { ... } }` — Error: `{ error: { code: "LOCK_NOT_FOUND", message: "..." } }`
+
+---
+
+## Authentication
+
+Two auth paths in `packages/core/src/lib/auth.ts`:
+
+1. **Bearer token**: `Authorization: Bearer lk_...` — hashes key with SHA-256, looks up in `api_keys` table, sets `request.workspaceId`. Updates `last_used_at`.
+2. **Internal service auth**: `X-Internal-Secret` header matches `INTERNAL_SECRET` env var — resolves workspace from `X-Workspace-Team-Id` (upserts workspace if needed). Used by Slack bot.
 
 ---
 
 ## Conflict Detection Pipeline
 
-When a new lock is committed, run this pipeline in `conflict-service.ts`:
+Runs on every `commitLock()` call in `conflict-service.ts`:
 
-### Step 1: Generate embedding
-```typescript
-// Use OpenAI text-embedding-3-small
-const embedding = await generateEmbedding(lock.message);
-```
+1. **Generate embedding** — OpenAI text-embedding-3-small. Returns early if no `OPENAI_API_KEY`.
+2. **Save embedding** — Raw SQL update: `UPDATE locks SET embedding = ...::vector WHERE id = ...`
+3. **pgvector similarity search** — Top 5 most similar **active** locks in the same **product** (cross-feature), using `<=>` cosine distance. Threshold: similarity > 0.75.
+4. **LLM classification** — For each candidate above threshold, call `classifyRelationship()` (OpenAI gpt-4o-mini, JSON mode) in parallel via `Promise.all`. Classifies as: `no_relation`, `related`, `potential_conflict`, or `supersession`.
+5. **Apply supersession** — If detected, old lock is set to `status='superseded'` with bidirectional linking.
 
-### Step 2: Find similar active locks in the same product
-```typescript
-// pgvector cosine similarity search
-// Find top 5 most similar ACTIVE locks in the same PRODUCT (cross-feature)
-const candidates = await db.execute(sql`
-  SELECT *, 1 - (embedding <=> ${embedding}) as similarity
-  FROM locks
-  WHERE product_id = ${lock.product_id}
-    AND status = 'active'
-    AND id != ${lock.id}
-  ORDER BY embedding <=> ${embedding}
-  LIMIT 5
-`);
-// Filter to similarity > 0.75 threshold
-```
-
-### Step 3: Classify relationships via LLM
-```typescript
-// For each candidate above threshold, call Claude to classify
-const prompt = `You are analyzing product decisions for conflicts.
-
-Decision A (existing, ${candidate.scope}): "${candidate.message}"
-  Context: ${candidate.source_context}
-  Feature: ${candidate.feature.name}
-
-Decision B (new, ${lock.scope}): "${lock.message}"
-  Context: ${lock.source_context}
-  Feature: ${lock.feature.name}
-
-Classify the relationship as exactly one of:
-- "no_relation" — these decisions are about different things
-- "related" — these are about the same area but don't conflict
-- "potential_conflict" — these decisions may contradict each other
-- "supersession" — Decision B replaces/updates Decision A
-
-Respond with JSON: { "relationship": "...", "explanation": "..." }`;
-```
-
-### Performance target
-Total pipeline: < 3 seconds. Embedding (~100ms) + pgvector query (~50ms) + LLM classification (~1-2s per candidate).
+**Graceful degradation:** Without `OPENAI_API_KEY`, conflict detection is skipped entirely. Semantic search falls back to ILIKE text matching.
 
 ---
 
-## Slack Bot Command Parsing
+## Decision Extraction (LLM)
 
-The Slack bot listens for `@lock` mentions in channels. Parse the message after the mention:
+`packages/core/src/lib/llm.ts` uses **OpenAI gpt-4o-mini** (not Claude) for two functions:
 
-### Command patterns
+1. **`extractDecision(threadContext, userHint?, product?, feature?)`** — Two modes:
+   - **Extract mode** (no hint): Finds the key decision in a thread conversation
+   - **Polish mode** (with hint): Cleans up a user-provided statement into a clear decision
+   - Returns: `{ decision, scope, tags, confidence, reasoning }`
+
+2. **`classifyRelationship(existingLock, newLock)`** — Classifies relationship between two decisions
+   - Returns: `{ relationship, explanation }`
+
+Both use `response_format: { type: 'json_object' }` for structured output.
+
+---
+
+## Slack Bot
+
+### Three Commit Modes
+
+The Slack bot supports three ways to record a decision:
+
+1. **Explicit** (`@lock <message>`) — User writes the decision directly. Committed immediately.
+2. **Extract** (`@lock this` / `@lock that` / `@lock it` / bare `@lock` in thread) — LLM reads the thread, extracts a decision, shows preview with confidence score. User confirms/edits/cancels via interactive buttons.
+3. **Polish** (`@lock the fact that...` / `@lock the decision that...`) — User gives the gist, LLM reads thread context and produces a clean statement. Auto-commits.
+
+Mode detection happens in `parser.ts` via `detectMode()`.
+
+### Command Patterns
+
 ```
-@lock <message>                                    → commit a lock
+@lock <message>                                    → explicit commit
 @lock <message> --scope major --ticket TRADE-442   → commit with flags
+@lock this / @lock that / @lock it / @lock         → extract from thread (requires thread)
+@lock the fact that <message>                      → polish mode
 @lock init --product <p> --feature <f>             → initialize channel
-@lock log                                          → show recent locks
-@lock log --product <p>                            → filter by product
-@lock log --feature <f>                            → filter by feature
-@lock log --scope major                            → filter by scope
+@lock log [--product <p>] [--feature <f>] [--scope] → show recent locks (default: 10)
+@lock recap [--product <p>]                        → grouped summary of all active decisions
+@lock search "query" [--product] [--feature]       → semantic search
 @lock products                                     → list products
-@lock features                                     → list features
-@lock features --product <p>                       → list features for product
+@lock features [--product <p>]                     → list features
 @lock revert <short_id> "reason"                   → revert a lock
-@lock link <short_id> <ref>                        → add a link
-@lock search "query"                               → semantic search
-@lock describe --product <p> "description"         → describe a product
-@lock describe --feature <f> "description"         → describe a feature
+@lock link <short_id> <ref>                        → add link (auto-detects type)
+@lock describe --product <p> "description"         → update product description
+@lock describe --feature <f> "description"         → update feature description
 ```
 
-### Flag parsing
-Extract these optional flags from any commit message:
-- `--scope <minor|major|architectural>` (default: minor)
-- `--ticket <TICKET-ID>` (creates a jira link)
-- `--tag <tag>` (can appear multiple times)
-- `--also <feature>` (cross-feature tagging)
+### Post-Commit Enrichment
 
-Everything that isn't a flag or a known subcommand is the decision message.
+Every committed lock message includes an actions bar with: scope dropdown, Add Jira button, Add Figma button, Add Tags button. These open Slack modals for inline annotation.
 
-### Thread context capture
-When @lock is used in a thread, use the Slack API to:
-1. Get the parent message and all replies
-2. Extract participant user IDs, resolve to display names
-3. Capture last 5 messages as context snippet
-4. Get the thread permalink
+### Interactive Actions
+
+All registered in `packages/slack/src/actions/`:
+- `confirm_commit` — Commit an extracted decision
+- `edit_decision` — Opens modal to edit decision text, scope, tags, ticket before committing
+- `cancel_extract` — Cancel extraction
+- `change_scope` — Update scope via dropdown (PATCH endpoint)
+- `add_link_jira` / `add_link_figma` — Opens modal to add link
+- `add_tags` — Opens modal to add comma-separated tags
 
 ---
 
-## CLI Behavior
+## CLI
 
-### Authentication
-On first use, prompt the user to provide:
-1. Lock API URL (default: https://api.lock.app)
-2. API key
+### Authentication Commands
 
-Store in `~/.lock/credentials`:
-```json
-{
-  "api_url": "https://api.lock.app",
-  "api_key": "lk_a7f3e2..."
-}
-```
+- `lock login [--url <url>] [--key <key>]` — Interactive or flag-based. Validates against server before saving. Credentials stored in `~/.lock/credentials` with `0600` permissions.
+- `lock logout [--force]` — Remove stored credentials (prompts for confirmation).
+- `lock whoami` — Shows API URL, key prefix, and server connectivity status.
+- Auto-prompt: Any command without credentials triggers interactive credential flow.
 
-### Project init
-`$ lock init --product trading --feature margin-rework` creates `.lock/config.json` in the current directory:
-```json
-{
-  "product": "trading",
-  "feature": "margin-rework"
-}
-```
+### Project Commands
 
-### Default commit
-`$ lock "message"` reads `.lock/config.json` for product/feature, then calls `POST /api/v1/locks`.
-
-If no `.lock/config.json` exists, error: "Run `lock init` first to scope this directory."
+- `lock init [--product <slug>] [--feature <slug>]` — Creates `.lock/config.json`. **Interactive mode** (no flags): fetches products/features from API, presents selection lists with `@inquirer/prompts`, includes "Create new" option.
+- `lock "message"` — Shorthand for `lock commit "message"`. Reads `.lock/config.json` for product/feature scope.
+- `lock commit <message> [--scope] [--tag...] [--ticket]` — Commit a decision.
+- `lock check <intent> [--product] [--feature]` — Pre-build constraint check. Semantic search for relevant existing decisions.
+- `lock log [--product] [--feature] [--scope] [--status] [--limit]` — List locks (default: 20).
+- `lock show <id>` — Full lock detail.
+- `lock search <query> [--product] [--feature]` — Semantic search.
+- `lock revert <id> [reason] [-m message]` — Revert a lock (reason via positional arg or `-m` flag).
+- `lock link <id> <ref>` — Add link. Auto-detects type: Jira (PROJ-123 pattern), GitHub, Figma, Linear, Notion, or other.
+- `lock export [--product] [--feature] [--scope] [--output LOCK.md]` — Export active decisions to markdown. Groups by feature, sorts by scope (architectural first).
+- `lock products` / `lock features [--product]` — List products/features.
 
 ---
 
 ## MCP Server Tools
 
-The MCP server exposes these tools for AI agents:
+9 tools exposed via stdio transport. The MCP server is a thin wrapper calling the Core API.
 
-```typescript
-// Read tools
+### Read Tools (returning JSON)
+
+```
 lock_list_products()                    → { products: [...] }
 lock_list_features({ product? })        → { features: [...] }
 lock_query({ product?, feature?,        → { locks: [...] }
@@ -514,25 +380,37 @@ lock_get_lineage({ lock_id })           → { chain: [...] }
 lock_search_semantic({ query,           → { locks: [...] }
                        product?,
                        feature? })
+```
 
-// Write tools
-lock_commit({ message, product?,        → { lock: {...}, conflicts: [...] }
+### Read Tools (returning formatted Markdown — for agent UX)
+
+```
+lock_context({ product?, feature? })    → Markdown: all active decisions grouped by feature, sorted by scope
+lock_check({ intent, product?,          → Markdown: relevant decisions + guidance for the agent
+             feature? })
+```
+
+### Write Tools
+
+```
+lock_commit({ message, product?,        → { lock: {...}, conflicts: [...], supersession? }
               feature?, scope?,
               tags?, source? })
 ```
 
-The MCP server is a thin wrapper that calls the Core API via HTTP. Auth is via API key passed in the MCP server config.
+`lock_commit` always authors as `{ type: 'agent', id: 'mcp-agent', name: 'MCP Agent', source: 'mcp' }`.
 
-### MCP server config example (for Claude Code / Cursor)
+### MCP server config (Claude Code / Cursor)
+
 ```json
 {
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@uselock/mcp-server"],
+      "args": ["@uselock/mcp"],
       "env": {
-        "LOCK_API_URL": "https://api.lock.app",
-        "LOCK_API_KEY": "lk_a7f3e2..."
+        "LOCK_API_URL": "http://localhost:3000",
+        "LOCK_API_KEY": "lk_..."
       }
     }
   }
@@ -543,20 +421,7 @@ The MCP server is a thin wrapper that calls the Core API via HTTP. Auth is via A
 
 ## Cross-Surface Notifications
 
-When a lock is committed from CLI or MCP (not Slack), the core engine should notify the relevant Slack channel if one is configured for that feature.
-
-In `notify-service.ts`:
-1. Look up `channel_configs` for the lock's feature
-2. If a Slack channel is configured, post a message:
-   ```
-   🔒 New lock from {source} (l-xxxxxx)
-      "{message}"
-      Author: {name} via {source}
-      [View in Lock]
-   ```
-3. Use Slack Web API (`chat.postMessage`) with Block Kit formatting
-
-This requires the Slack bot token to be available in the core engine. Store it in the workspace record or env var.
+When a lock is committed from CLI or MCP (not Slack), `notify-service.ts` posts to the relevant Slack channel if one is configured for that feature. Uses `@slack/web-api` with `SLACK_BOT_TOKEN`. Errors are silently swallowed (non-blocking).
 
 ---
 
@@ -566,124 +431,111 @@ This requires the Slack bot token to be available in the core engine. Store it i
 # Database
 DATABASE_URL=postgresql://lock:lock@localhost:5432/lock
 
-# OpenAI (embeddings)
+# OpenAI (embeddings + LLM classification/extraction)
 OPENAI_API_KEY=sk-...
 
-# Anthropic (conflict classification)
+# Anthropic (unused in current implementation, reserved for future use)
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Slack
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
-SLACK_APP_TOKEN=xapp-...          # For socket mode (dev)
+SLACK_APP_TOKEN=xapp-...          # For socket mode
 
 # App
 API_PORT=3000
 SLACK_PORT=3001
 NODE_ENV=development
+INTERNAL_SECRET=change-me          # Shared secret for Slack bot → Core API auth
+```
+
+**Graceful degradation:**
+- Without `OPENAI_API_KEY`: No embeddings, no conflict detection, semantic search falls back to ILIKE
+- Without Slack tokens: CLI and MCP still work, no cross-surface notifications
+- Without `INTERNAL_SECRET`: Slack bot can't authenticate to core API
+
+---
+
+## Deployment
+
+### Docker (recommended)
+
+`docker-compose.yml` defines two services:
+- **postgres**: `pgvector/pgvector:pg16` with `init-db.sql` enabling vector + pgcrypto extensions
+- **lock**: Multi-stage Dockerfile builds core + slack only (CLI and MCP excluded). `docker-entrypoint.sh` waits for PG health, runs `drizzle-kit push --force`, then starts both core API and Slack bot as background processes.
+
+```bash
+cp .env.example .env  # Fill in keys
+docker compose up -d
+# Admin UI at http://localhost:3000 — create workspace + API key
+```
+
+### Development
+
+```bash
+pnpm install
+pnpm db:up              # Start PostgreSQL via Docker
+pnpm db:migrate         # Run Drizzle migrations
+pnpm build              # Build all packages
+pnpm dev                # Start core + slack (concurrently)
+pnpm dev:core           # Core API only
+pnpm dev:slack          # Slack bot only
+pnpm dev:cli            # CLI in dev mode (tsx)
+pnpm dev:mcp            # MCP server in dev mode (tsx)
 ```
 
 ---
 
-## Short ID Generation
+## Testing
 
-Lock IDs are human-readable: `l-` + 6 hex characters (e.g., `l-a7f3e2`).
+Uses Vitest. Config in `vitest.config.ts` — discovers `packages/*/src/**/*.test.ts`.
 
-In `packages/core/src/lib/id.ts`:
-```typescript
-import crypto from 'crypto';
-
-export function generateShortId(): string {
-  return 'l-' + crypto.randomBytes(3).toString('hex');
-}
+```bash
+pnpm test               # All tests
+pnpm test:unit          # Unit tests only (excludes e2e/)
+pnpm test:e2e           # E2e tests (requires DATABASE_URL)
 ```
 
-Check for collisions on insert. If collision, regenerate.
+### Test Files
 
----
-
-## Build Order (Phase 0 MVP)
-
-Build in this order to get a working system as fast as possible:
-
-### 1. Core API + Database (Day 1-2)
-- [ ] Set up monorepo with pnpm workspace
-- [ ] Docker Compose with PostgreSQL + pgvector
-- [ ] Drizzle schema + migrations
-- [ ] Fastify server with health check
-- [ ] `POST /api/v1/locks` — create a lock (no conflict detection yet)
-- [ ] `GET /api/v1/locks` — list/filter locks
-- [ ] `GET /api/v1/locks/:shortId` — get single lock
-- [ ] `POST /api/v1/products` + `GET /api/v1/products`
-- [ ] `POST /api/v1/features` + `GET /api/v1/features`
-- [ ] `POST /api/v1/channel-configs`
-- [ ] API key auth middleware
-- [ ] Auto-create product/feature on first reference (upsert logic)
-
-### 2. Slack Bot (Day 2-3)
-- [ ] Bolt app setup with socket mode
-- [ ] `@lock init --product <p> --feature <f>` command
-- [ ] `@lock <message>` command (commit a lock)
-- [ ] Flag parsing (--scope, --ticket, --tag)
-- [ ] Thread context capture (participants, snippet, permalink)
-- [ ] `@lock log` command with filters
-- [ ] `@lock products` and `@lock features` commands
-- [ ] Block Kit message formatting
-- [ ] `@lock revert` and `@lock link` commands
-
-### 3. CLI (Day 3-4)
-- [ ] Commander.js setup with subcommands
-- [ ] `lock init --product <p> --feature <f>` (creates .lock/config.json)
-- [ ] `lock "message"` (commit a lock via API)
-- [ ] `lock log` with filters
-- [ ] `lock products` and `lock features`
-- [ ] `lock show <id>` and `lock revert <id>`
-- [ ] Credentials management (~/.lock/credentials)
-- [ ] Terminal formatting with chalk
-
-### 4. MCP Server (Day 4-5)
-- [ ] MCP SDK setup
-- [ ] Read tools: lock_query, lock_list_products, lock_list_features, lock_get, lock_search_semantic
-- [ ] Write tools: lock_commit
-- [ ] API client wrapper
-
-### 5. Conflict Detection (Day 5-6)
-- [ ] OpenAI embedding generation on lock commit
-- [ ] pgvector similarity search
-- [ ] Claude API classification (conflict vs. supersession vs. unrelated)
-- [ ] Return conflicts/supersession in lock commit response
-- [ ] Slack interactive messages for conflict resolution ([Lock anyway] [Cancel])
-
-### 6. Cross-Surface Notifications (Day 6-7)
-- [ ] Notify service: post to Slack when locks come from CLI/MCP
-- [ ] Format notifications with Block Kit
+- `packages/core/src/lib/id.test.ts` — Short ID generation (prefix, length, hex format, uniqueness)
+- `packages/core/src/e2e/api.test.ts` — Full API e2e suite (skipped without DB). Tests: health, auth, products CRUD, features CRUD, lock commit/list/get/update/revert/link, channel configs. Uses `setup.ts` for test app bootstrap + seed data + cleanup.
+- `packages/cli/src/lib/formatters.test.ts` — Terminal formatting (lock list, lock detail, conflicts, supersession)
+- `packages/slack/src/lib/parser.test.ts` — Command parsing (subcommands, flags, modes, quoted strings, positional args)
+- `packages/slack/src/lib/formatters.test.ts` — Block Kit formatting (all formatters)
 
 ---
 
 ## Code Style & Conventions
 
 - **Language**: TypeScript (strict mode) throughout
-- **Modules**: ESM (`"type": "module"` in package.json)
-- **Formatting**: Prettier (default config)
-- **Linting**: ESLint with @typescript-eslint
-- **Error handling**: Use Fastify's error handling. Return structured errors: `{ error: { code: "LOCK_NOT_FOUND", message: "..." } }`
+- **Modules**: ESM (`"type": "module"` in all package.json files)
+- **Error handling**: Structured errors: `{ error: { code: "LOCK_NOT_FOUND", message: "..." } }`
 - **Naming**: camelCase for variables/functions, PascalCase for types, kebab-case for files
-- **Database**: Always use parameterized queries. Never concatenate SQL strings.
-- **API responses**: Always wrap in `{ data: ... }` for success, `{ error: ... }` for errors
-- **Logging**: Use Fastify's built-in pino logger
+- **Database**: Parameterized queries. Raw SQL via `db.execute(sql`...`)` only for pgvector operations.
+- **API responses**: `{ data: ... }` for success, `{ error: ... }` for errors
+- **Logging**: Fastify's built-in pino logger (debug in dev, info in prod)
 
 ---
 
 ## Important Design Decisions
 
-1. **Product/Feature are auto-created**: When someone runs `@lock init --product trading --feature margin-rework`, if "trading" doesn't exist, create it. No admin step.
+1. **Product/Feature are auto-created**: `upsertProduct`/`upsertFeature` in `lock-service.ts`. Slugs auto-generate Title Case display names.
 
-2. **Locks are immutable**: Once committed, a lock's message can't be edited. You can only revert (which creates a new lock) or supersede (new lock replaces old one).
+2. **Locks are immutable**: Message can never be edited. Only `scope` and `tags` are mutable (via PATCH). Revert creates a new lock; supersession creates a new lock.
 
-3. **Conflict detection is cross-feature but within-product**: A decision in `margin-rework` is checked against decisions in `ui` and `risk-engine` if they're all under `trading`.
+3. **Conflict detection is cross-feature but within-product**: Decisions in `margin-rework` are checked against `ui` and `risk-engine` if they're all under `trading`.
 
-4. **Slack is the awareness layer**: Even when decisions come from CLI or MCP, they're surfaced in Slack. Slack is where the team "sees" what's happening.
+4. **Slack is the awareness layer**: Even CLI/MCP decisions are surfaced in Slack via `notify-service.ts`.
 
-5. **The CLI and MCP server are thin clients**: They just call the REST API. All business logic lives in the core engine.
+5. **CLI and MCP are thin clients**: All business logic lives in core. They just call the REST API.
 
-6. **Short IDs are for humans, UUIDs are for the database**: External APIs accept both. Routes use short_id. Internal references use UUID.
+6. **Short IDs are for humans, UUIDs are for the database**: `l-` + 6 hex chars. Generated in `id.ts` with collision retry (max 3 attempts).
+
+7. **Admin UI is unauthenticated**: The `/_ui/*` routes and root HTML page have no auth gate — API key creation is open to anyone who can reach the server.
+
+8. **Slack bot uses internal auth**: Not Bearer tokens — uses `X-Internal-Secret` + `X-Workspace-Team-Id` headers for service-to-service auth.
+
+9. **LLM calls use OpenAI gpt-4o-mini**: Both extraction and classification. Returns early / degrades gracefully if API key is missing.
+
+10. **Embedding writes bypass Drizzle ORM**: Raw SQL for pgvector operations due to custom type complexity.

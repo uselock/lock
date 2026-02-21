@@ -97,6 +97,7 @@ export const locks = pgTable(
     scope: text('scope').notNull().default('minor'), // 'minor' | 'major' | 'architectural'
     status: text('status').notNull().default('active'), // 'active' | 'superseded' | 'reverted' | 'proposed' | 'auto'
     tags: text('tags').array().default([]),
+    decisionType: text('decision_type'),
 
     // Source context
     sourceType: text('source_type').notNull(), // 'slack' | 'cli' | 'agent_session' | 'api'
@@ -120,6 +121,7 @@ export const locks = pgTable(
     index('idx_locks_feature').on(table.featureId),
     index('idx_locks_status').on(table.status),
     index('idx_locks_short_id').on(table.shortId),
+    index('idx_locks_decision_type').on(table.decisionType),
   ]
 );
 

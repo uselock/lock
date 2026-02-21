@@ -1,3 +1,6 @@
+export type DecisionType = 'product' | 'technical' | 'business' | 'design' | 'process';
+export const VALID_DECISION_TYPES: DecisionType[] = ['product', 'technical', 'business', 'design', 'process'];
+
 export interface LockAuthor {
   type: 'human' | 'agent';
   id: string;
@@ -23,6 +26,7 @@ export interface CreateLockRequest {
   feature: string;
   scope?: 'minor' | 'major' | 'architectural';
   tags?: string[];
+  decision_type?: DecisionType;
   author: LockAuthor;
   source: LockSource;
   links?: LockLink[];
@@ -51,6 +55,7 @@ export interface ListLocksQuery {
   status?: string;
   author?: string;
   tags?: string[];
+  decision_type?: string;
   limit?: number;
   offset?: number;
 }

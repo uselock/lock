@@ -6,12 +6,12 @@ export function registerAddLink(app: any, callApi: Function) {
   // Handle both jira and figma buttons
   app.action('add_link_jira', async ({ action, ack, body, client }: any) => {
     await ack();
-    await openLinkModal(client, body.trigger_id, action.value, 'jira', 'Add Jira Ticket', 'e.g. TRADE-442');
+    await openLinkModal(client, body.trigger_id, action.value, 'jira', 'Add Jira Ticket', 'e.g. TRADE-442', body.team?.id || '');
   });
 
   app.action('add_link_figma', async ({ action, ack, body, client }: any) => {
     await ack();
-    await openLinkModal(client, body.trigger_id, action.value, 'figma', 'Add Figma Link', 'e.g. https://figma.com/...');
+    await openLinkModal(client, body.trigger_id, action.value, 'figma', 'Add Figma Link', 'e.g. https://figma.com/...', body.team?.id || '');
   });
 
   // Handle modal submission
@@ -26,7 +26,7 @@ export function registerAddLink(app: any, callApi: Function) {
       await callApi('POST', `/api/v1/locks/${metadata.short_id}/link`, {
         link_type: metadata.link_type,
         link_ref: linkRef,
-      });
+      }, metadata.teamId || view.team_id || '');
     } catch {
       // Modal already closed — best-effort
     }
@@ -40,13 +40,14 @@ async function openLinkModal(
   linkType: string,
   title: string,
   placeholder: string,
+  teamId: string,
 ) {
   await client.views.open({
     trigger_id: triggerId,
     view: {
       type: 'modal',
       callback_id: 'add_link_submit',
-      private_metadata: JSON.stringify({ short_id: shortId, link_type: linkType }),
+      private_metadata: JSON.stringify({ short_id: shortId, link_type: linkType, teamId }),
       title: { type: 'plain_text', text: title },
       submit: { type: 'plain_text', text: 'Add' },
       blocks: [

@@ -160,11 +160,13 @@ export function formatLockCommit(data: any): any[] {
     lock.scope === 'major' ? ':large_orange_diamond:' :
     ':small_blue_diamond:';
 
+  const typeBadge = lock.decision_type ? ` | :label: ${lock.decision_type}` : '';
+
   blocks.push({
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `:lock: *Lock committed* \`${lock.short_id}\`\n${scopeEmoji} *${lock.scope}* | ${lock.product?.name || lock.product?.slug || 'unknown'} / ${lock.feature?.name || lock.feature?.slug || 'unknown'}`,
+      text: `:lock: *Lock committed* \`${lock.short_id}\`\n${scopeEmoji} *${lock.scope}*${typeBadge} | ${lock.product?.name || lock.product?.slug || 'unknown'} / ${lock.feature?.name || lock.feature?.slug || 'unknown'}`,
     },
   });
 
@@ -284,12 +286,13 @@ export function formatLockList(locks: any[]): any[] {
     const productSlug = lock.product?.slug || lock.product || '';
     const featureSlug = lock.feature?.slug || lock.feature || '';
     const scope = `${productSlug}/${featureSlug}`;
+    const typeBadge = lock.decision_type ? ` | ${lock.decision_type}` : '';
 
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}${statusBadge}\n_${scope} | ${lock.author?.name || lock.author_name || 'unknown'} | ${new Date(lock.created_at).toLocaleDateString()}_`,
+        text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}${statusBadge}\n_${scope}${typeBadge} | ${lock.author?.name || lock.author_name || 'unknown'} | ${new Date(lock.created_at).toLocaleDateString()}_`,
       },
     });
   }
@@ -452,14 +455,195 @@ export function formatRecap(locks: any[], productSlug: string): any[] {
         ? new Date(lock.created_at).toLocaleDateString()
         : '';
 
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+
       blocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}\n_${authorName} | ${date}_`,
+          text: `${scopeEmoji} \`${lock.short_id}\`${typeBadge} ${lock.message}\n_${authorName} | ${date}_`,
         },
       });
     }
+  }
+
+  return blocks;
+}
+
+/**
+ * Format a recap digest with stats breakdowns.
+ */
+export function formatRecapDigest(recap: any, product?: string): any[] {
+  const blocks: any[] = [];
+  const { period, summary, decisions, top_contributors } = recap;
+
+  if (summary.total_decisions === 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: ':mag: No decisions found for this period.',
+      },
+    });
+    return blocks;
+  }
+
+  // Header
+  const fromDate = new Date(period.from).toLocaleDateString();
+  const toDate = new Date(period.to).toLocaleDateString();
+  const title = product ? `Recap — ${product}` : 'Recap — All Products';
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `:clipboard: *${title}*\n${fromDate} – ${toDate} | ${summary.total_decisions} decision${summary.total_decisions === 1 ? '' : 's'}`,
+    },
+  });
+
+  // Stats
+  const scopeStr = Object.entries(summary.by_scope as Record<string, number>)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+  const typeStr = Object.entries(summary.by_type as Record<string, number>)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  let statsText = `*Scopes:* ${scopeStr || 'none'}`;
+  if (typeStr) statsText += `\n*Types:* ${typeStr}`;
+  if (summary.reverts > 0) statsText += ` | Reverts: ${summary.reverts}`;
+  if (summary.supersessions > 0) statsText += ` | Supersessions: ${summary.supersessions}`;
+
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: statsText }],
+  });
+
+  // Top contributors
+  if (top_contributors && top_contributors.length > 0) {
+    const contribStr = top_contributors
+      .map((c: any) => `${c.name} (${c.count})`)
+      .join(', ');
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `*Top contributors:* ${contribStr}` }],
+    });
+  }
+
+  // By product (for org-wide)
+  if (!product && summary.by_product && summary.by_product.length > 0) {
+    blocks.push({ type: 'divider' });
+    for (const p of summary.by_product) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${p.name}* (\`${p.slug}\`) — ${p.count} decision${p.count === 1 ? '' : 's'}`,
+        },
+      });
+    }
+  }
+
+  // Key decisions (architectural + major, max 5)
+  const keyDecisions = (decisions || [])
+    .filter((d: any) => d.scope === 'architectural' || d.scope === 'major')
+    .slice(0, 5);
+
+  if (keyDecisions.length > 0) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '*Key Decisions*' },
+    });
+    for (const lock of keyDecisions) {
+      const scopeEmoji =
+        lock.scope === 'architectural' ? ':rotating_light:' :
+        ':large_orange_diamond:';
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${scopeEmoji} \`${lock.short_id}\`${typeBadge} ${lock.message}\n_${lock.author?.name || 'unknown'} | ${lock.feature?.name || 'unknown'}_`,
+        },
+      });
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * Format import candidate decisions for confirmation.
+ */
+export function formatImportCandidates(candidates: any[], metadata: any): any[] {
+  const blocks: any[] = [];
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `:mag: *Found ${candidates.length} potential decision${candidates.length === 1 ? '' : 's'}* in channel history`,
+    },
+  });
+
+  const maxDisplay = Math.min(candidates.length, 10);
+  for (let i = 0; i < maxDisplay; i++) {
+    const candidate = candidates[i];
+    const scopeEmoji =
+      candidate.scope === 'architectural' ? ':rotating_light:' :
+      candidate.scope === 'major' ? ':large_orange_diamond:' :
+      ':small_blue_diamond:';
+
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${scopeEmoji} *${i + 1}.* ${candidate.decision}\n_Confidence: ${Math.round(candidate.confidence * 100)}% | ${candidate.reasoning}_`,
+      },
+    });
+
+    const payload = {
+      decision: candidate.decision,
+      scope: candidate.scope,
+      decision_type: candidate.decision_type,
+      tags: candidate.tags,
+      product: metadata.product,
+      feature: metadata.feature,
+    };
+    let payloadStr = JSON.stringify(payload);
+    if (payloadStr.length > 1900) {
+      payload.decision = payload.decision.slice(0, 200) + '...';
+      payloadStr = JSON.stringify(payload);
+    }
+
+    blocks.push({
+      type: 'actions',
+      block_id: `import_candidate_${i}`,
+      elements: [
+        {
+          type: 'button',
+          action_id: 'import_commit',
+          text: { type: 'plain_text', text: 'Commit' },
+          style: 'primary',
+          value: payloadStr,
+        },
+        {
+          type: 'button',
+          action_id: 'import_skip',
+          text: { type: 'plain_text', text: 'Skip' },
+          value: String(i),
+        },
+      ],
+    });
+  }
+
+  if (candidates.length > 10) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `_Showing first 10 of ${candidates.length} candidates._` }],
+    });
   }
 
   return blocks;
@@ -493,4 +677,76 @@ export function formatSuccess(message: string): any[] {
       },
     },
   ];
+}
+
+/**
+ * Format a conflict warning with Commit Anyway / Cancel buttons.
+ */
+export function formatConflictWarning(
+  conflicts: any[],
+  supersession: any,
+  commitPayload: any,
+): any[] {
+  const blocks: any[] = [];
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `:warning: *Conflict detected* — this decision overlaps with existing locks:`,
+    },
+  });
+
+  if (supersession?.detected && supersession.supersedes) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `:lock: \`${supersession.supersedes.short_id}\` — ${supersession.supersedes.message}\n_${supersession.explanation || ''}_`,
+      },
+    });
+  }
+
+  for (const conflict of conflicts) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `:lock: \`${conflict.lock.short_id}\` — ${conflict.lock.message}\n_${conflict.explanation || ''}_`,
+      },
+    });
+  }
+
+  blocks.push({ type: 'divider' });
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*Your decision:*\n> ${commitPayload.message}`,
+    },
+  });
+
+  blocks.push({
+    type: 'actions',
+    block_id: 'conflict_actions',
+    elements: [
+      {
+        type: 'button',
+        action_id: 'force_commit',
+        text: { type: 'plain_text', text: 'Commit anyway' },
+        style: 'primary',
+        value: JSON.stringify(commitPayload),
+      },
+      {
+        type: 'button',
+        action_id: 'cancel_commit',
+        text: { type: 'plain_text', text: 'Cancel' },
+        style: 'danger',
+        value: 'cancel',
+      },
+    ],
+  });
+
+  return blocks;
 }

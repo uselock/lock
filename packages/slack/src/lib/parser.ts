@@ -10,6 +10,8 @@ const KNOWN_SUBCOMMANDS = [
   'search',
   'describe',
   'recap',
+  'digest',
+  'import',
 ] as const;
 
 const SCOPE_VALUES = ['minor', 'major', 'architectural'] as const;
@@ -174,6 +176,36 @@ export function parseCommand(text: string): ParsedCommand {
 
     if (token === '--feature' && i + 1 < tokens.length) {
       flags.feature = tokens[i + 1];
+      i += 2;
+      continue;
+    }
+
+    if (token === '--type' && i + 1 < tokens.length) {
+      flags.type = tokens[i + 1];
+      i += 2;
+      continue;
+    }
+
+    if (token === '--since' && i + 1 < tokens.length) {
+      flags.since = tokens[i + 1];
+      i += 2;
+      continue;
+    }
+
+    if (token === '--schedule' && i + 1 < tokens.length) {
+      flags.schedule = tokens[i + 1];
+      i += 2;
+      continue;
+    }
+
+    if (token === '--hour' && i + 1 < tokens.length) {
+      flags.hour = tokens[i + 1];
+      i += 2;
+      continue;
+    }
+
+    if (token === '--days' && i + 1 < tokens.length) {
+      flags.days = tokens[i + 1];
       i += 2;
       continue;
     }

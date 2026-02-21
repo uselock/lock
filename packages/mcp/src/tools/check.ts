@@ -12,26 +12,57 @@ function formatCheck(locks: Lock[], intent: string): string {
     return 'No relevant decisions found. Proceed as planned.';
   }
 
+  // Split into blocking (architectural + major) and informational (minor)
+  const blocking = locks.filter(l => l.scope === 'architectural' || l.scope === 'major');
+  const informational = locks.filter(l => l.scope === 'minor');
+
   const lines: string[] = [];
   lines.push('# Relevant Decisions');
   lines.push('');
   lines.push(`Intent: "${intent}"`);
-  lines.push('');
 
-  for (let i = 0; i < locks.length; i++) {
-    const lock = locks[i];
+  if (blocking.length > 0) {
+    lines.push('');
+    lines.push('## BLOCKING');
+    lines.push('');
+    for (let i = 0; i < blocking.length; i++) {
+      const lock = blocking[i];
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+      lines.push(
+        `${i + 1}. [${lock.scope}]${typeBadge} ${lock.short_id}: ${lock.message}`,
+      );
+      lines.push(
+        `   Feature: ${lock.feature.slug} | Author: ${lock.author.name} | ${formatDate(lock.created_at)}`,
+      );
+    }
+    lines.push('');
     lines.push(
-      `${i + 1}. [${lock.scope}] ${lock.short_id}: ${lock.message}`,
-    );
-    lines.push(
-      `   Feature: ${lock.feature.slug} | Author: ${lock.author.name} | ${formatDate(lock.created_at)}`,
+      'WARNING: These are architectural/major decisions. If your work contradicts them, you MUST use lock_commit to record a superseding decision before proceeding.',
     );
   }
 
-  lines.push('');
-  lines.push(
-    'If your work contradicts a decision, use lock_commit to record a superseding decision.',
-  );
+  if (informational.length > 0) {
+    lines.push('');
+    lines.push('## Informational');
+    lines.push('');
+    for (let i = 0; i < informational.length; i++) {
+      const lock = informational[i];
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+      lines.push(
+        `${i + 1}. [${lock.scope}]${typeBadge} ${lock.short_id}: ${lock.message}`,
+      );
+      lines.push(
+        `   Feature: ${lock.feature.slug} | Author: ${lock.author.name} | ${formatDate(lock.created_at)}`,
+      );
+    }
+  }
+
+  if (blocking.length === 0) {
+    lines.push('');
+    lines.push(
+      'If your work contradicts a decision, use lock_commit to record a superseding decision.',
+    );
+  }
 
   return lines.join('\n');
 }

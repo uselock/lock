@@ -7,8 +7,10 @@ import {
   addLink,
   searchLocks,
   updateLockMetadata,
+  getRecap,
 } from '../services/lock-service.js';
-import { extractFromThread, type ExtractRequest } from '../services/extract-service.js';
+import { extractFromThread, extractBatchDecisions, type ExtractRequest } from '../services/extract-service.js';
+import { preCheckConflicts } from '../services/conflict-service.js';
 import { getLineage } from '../services/lineage-service.js';
 import type {
   CreateLockRequest,
@@ -17,6 +19,7 @@ import type {
   SearchLocksRequest,
   ListLocksQuery,
 } from '../types.js';
+import { VALID_DECISION_TYPES } from '../types.js';
 
 export async function lockRoutes(fastify: FastifyInstance) {
   // Commit a new lock
@@ -75,6 +78,65 @@ export async function lockRoutes(fastify: FastifyInstance) {
     return { data: result };
   });
 
+  // Recap — aggregated summary of recent decisions
+  fastify.get('/recap', async (request) => {
+    const query = request.query as { product?: string; since?: string; limit?: string };
+    const result = await getRecap(request.workspaceId, {
+      product: query.product,
+      since: query.since,
+      limit: query.limit ? parseInt(query.limit, 10) : undefined,
+    });
+    return { data: result };
+  });
+
+  // Batch extraction from message history
+  fastify.post('/extract-batch', async (request, reply) => {
+    const body = request.body as { messages: { text: string; author: string; timestamp: string }[]; product?: string; feature?: string };
+
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'messages array is required and must not be empty' },
+      });
+    }
+
+    try {
+      const result = await extractBatchDecisions(body);
+      return { data: result };
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({
+        error: { code: 'EXTRACTION_FAILED', message: err.message },
+      });
+    }
+  });
+
+  // Pre-check for conflicts before committing
+  fastify.post('/pre-check', async (request, reply) => {
+    const body = request.body as { message: string; product: string; feature: string; scope?: string };
+
+    if (!body.message || !body.product || !body.feature) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'message, product, and feature are required' },
+      });
+    }
+
+    try {
+      const result = await preCheckConflicts(
+        request.workspaceId,
+        body.message,
+        body.product,
+        body.feature,
+        body.scope ?? 'minor',
+      );
+      return { data: result };
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({
+        error: { code: 'PRE_CHECK_FAILED', message: err.message },
+      });
+    }
+  });
+
   // Get a single lock
   fastify.get('/:shortId', async (request, reply) => {
     const { shortId } = request.params as { shortId: string };
@@ -87,14 +149,20 @@ export async function lockRoutes(fastify: FastifyInstance) {
     return { data: { lock } };
   });
 
-  // Update lock metadata (scope, tags)
+  // Update lock metadata (scope, tags, decision_type)
   fastify.patch('/:shortId', async (request, reply) => {
     const { shortId } = request.params as { shortId: string };
-    const body = request.body as { scope?: string; tags?: string[] };
+    const body = request.body as { scope?: string; tags?: string[]; decision_type?: string };
 
-    if (!body.scope && !body.tags) {
+    if (!body.scope && !body.tags && !body.decision_type) {
       return reply.status(400).send({
-        error: { code: 'VALIDATION_ERROR', message: 'At least one of scope or tags is required' },
+        error: { code: 'VALIDATION_ERROR', message: 'At least one of scope, tags, or decision_type is required' },
+      });
+    }
+
+    if (body.decision_type && !VALID_DECISION_TYPES.includes(body.decision_type as any)) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: `Invalid decision_type. Must be one of: ${VALID_DECISION_TYPES.join(', ')}` },
       });
     }
 
@@ -102,6 +170,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
       const result = await updateLockMetadata(shortId, {
         scope: body.scope as any,
         tags: body.tags,
+        decision_type: body.decision_type as any,
       });
       if (!result) {
         return reply.status(404).send({

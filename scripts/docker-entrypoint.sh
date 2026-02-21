@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 echo "Lock: waiting for PostgreSQL..."
@@ -19,12 +19,26 @@ echo "Lock: starting services..."
 node /app/packages/core/dist/index.js &
 CORE_PID=$!
 
+# Give core a moment to start before Slack bot connects
+sleep 2
+
 # Start Slack bot
 node /app/packages/slack/dist/index.js &
 SLACK_PID=$!
 
 # Forward signals to child processes
-trap 'kill $CORE_PID $SLACK_PID 2>/dev/null; wait $CORE_PID $SLACK_PID 2>/dev/null' SIGTERM SIGINT
+cleanup() {
+  kill "$CORE_PID" "$SLACK_PID" 2>/dev/null
+  wait "$CORE_PID" "$SLACK_PID" 2>/dev/null
+}
+trap cleanup SIGTERM SIGINT
 
-# Wait for both processes
-wait $CORE_PID $SLACK_PID
+echo "Lock: core API (PID $CORE_PID) and Slack bot (PID $SLACK_PID) started."
+
+# Wait for either process to exit
+wait -n "$CORE_PID" "$SLACK_PID"
+EXIT_CODE=$?
+
+echo "Lock: a process exited with code $EXIT_CODE, shutting down..."
+cleanup
+exit $EXIT_CODE

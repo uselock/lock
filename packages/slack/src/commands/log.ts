@@ -24,6 +24,9 @@ export async function handleLog(
   if (command.flags.scope) {
     params.set('scope', command.flags.scope);
   }
+  if (command.flags.type) {
+    params.set('decision_type', command.flags.type);
+  }
 
   // Default limit
   params.set('limit', '10');

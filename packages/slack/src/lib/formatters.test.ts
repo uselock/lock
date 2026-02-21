@@ -5,6 +5,8 @@ import {
   formatProductList,
   formatFeatureList,
   formatRecap,
+  formatRecapDigest,
+  formatImportCandidates,
   formatError,
   formatSuccess,
   formatExtractionPreview,
@@ -264,6 +266,94 @@ describe('formatSuccess', () => {
     const text = blocksText(blocks);
     expect(text).toContain(':white_check_mark:');
     expect(text).toContain('Done!');
+  });
+});
+
+describe('formatLockCommit decision_type', () => {
+  it('shows type badge when decision_type is present', () => {
+    const blocks = formatLockCommit({
+      lock: {
+        short_id: 'l-typ456',
+        message: 'Use Redis',
+        scope: 'major',
+        status: 'active',
+        decision_type: 'technical',
+        product: { slug: 'trading', name: 'Trading' },
+        feature: { slug: 'cache', name: 'Cache' },
+        author: { name: 'alice', source: 'slack' },
+        tags: [],
+        created_at: '2026-01-01T00:00:00Z',
+      },
+      conflicts: [],
+      supersession: { detected: false },
+    });
+    const text = blocksText(blocks);
+    expect(text).toContain(':label: technical');
+  });
+});
+
+describe('formatRecapDigest', () => {
+  it('shows "No decisions" for empty recap', () => {
+    const blocks = formatRecapDigest({
+      period: { from: '2026-01-01T00:00:00Z', to: '2026-01-08T00:00:00Z' },
+      summary: { total_decisions: 0, by_scope: {}, by_type: {}, by_product: [], reverts: 0, supersessions: 0 },
+      decisions: [],
+      top_contributors: [],
+    });
+    expect(blocksText(blocks)).toContain('No decisions');
+  });
+
+  it('shows stats and key decisions', () => {
+    const blocks = formatRecapDigest({
+      period: { from: '2026-01-01T00:00:00Z', to: '2026-01-08T00:00:00Z' },
+      summary: {
+        total_decisions: 3,
+        by_scope: { major: 2, minor: 1 },
+        by_type: { technical: 2, product: 1 },
+        by_product: [],
+        reverts: 0,
+        supersessions: 1,
+      },
+      decisions: [
+        {
+          short_id: 'l-111',
+          message: 'Use Redis',
+          scope: 'major',
+          decision_type: 'technical',
+          author: { name: 'alice' },
+          feature: { name: 'Cache' },
+        },
+      ],
+      top_contributors: [{ name: 'alice', count: 3 }],
+    }, 'trading');
+    const text = blocksText(blocks);
+    expect(text).toContain('Recap');
+    expect(text).toContain('3 decision');
+    expect(text).toContain('alice');
+    expect(text).toContain('Use Redis');
+  });
+});
+
+describe('formatImportCandidates', () => {
+  it('shows candidates with commit/skip buttons', () => {
+    const blocks = formatImportCandidates(
+      [
+        {
+          decision: 'Use Redis for caching',
+          scope: 'major',
+          confidence: 0.85,
+          reasoning: 'Team agreed on Redis',
+          tags: ['cache'],
+        },
+      ],
+      { product: 'trading', feature: 'cache' },
+    );
+    const text = blocksText(blocks);
+    expect(text).toContain('Found 1 potential decision');
+    expect(text).toContain('Use Redis for caching');
+    expect(text).toContain('85%');
+    expect(text).toContain('import_commit');
+    expect(text).toContain('import_skip');
   });
 });
 

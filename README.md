@@ -3,25 +3,40 @@
 Decision tracking for product teams. Records product decisions where they happen — Slack, terminal, or AI agent sessions — so you always know why something was built a certain way.
 
 ```
-@lock Use notional value instead of margin for position display --scope major --ticket TRADE-442
+@lock Use notional value instead of margin for position display --scope major --type technical
 ```
 
 ```
 $ lock "Use notional value instead of margin for position display" --scope major
 ```
 
-Lock captures the decision, detects conflicts with existing decisions, and notifies the team in Slack.
+Lock captures the decision, classifies its type, detects conflicts with existing decisions, and notifies the team in Slack. If a conflict is found, the user is warned and asked to confirm before committing.
 
 ## How it works
 
 Lock has one core API and multiple input surfaces:
 
-- **Slack bot** — `@lock <decision>` in any channel
+- **Slack bot** — `@lock <decision>` in any channel. Supports 3 modes: explicit, extract from thread, and polish.
 - **CLI** — `lock "<decision>"` from the terminal
 - **MCP server** — AI agents (Claude Code, Cursor) read and write decisions via tools
 - **REST API** — direct HTTP calls
+- **GitHub Action** — comments on PRs with relevant locked decisions
 
-Decisions are stored in PostgreSQL with vector embeddings. When a new decision is committed, Lock searches for conflicting or superseding decisions across the same product and flags them.
+Decisions are stored in PostgreSQL with optional vector embeddings. When a new decision is committed, Lock searches for conflicting or superseding decisions across the same product and flags them. Each decision is automatically classified into a type (product, technical, business, design, or process) by the LLM.
+
+### LLM providers
+
+Lock supports **both Anthropic (Claude) and OpenAI** for LLM operations:
+
+| | Anthropic only | OpenAI only | Both |
+|---|---|---|---|
+| Decision extraction | Claude Haiku 4.5 | gpt-4o-mini | Claude Haiku 4.5 |
+| Conflict classification | Claude Haiku 4.5 | gpt-4o-mini | Claude Haiku 4.5 |
+| Decision type inference | Claude Haiku 4.5 | gpt-4o-mini | Claude Haiku 4.5 |
+| Embeddings / vector search | Text fallback | OpenAI embeddings | OpenAI embeddings |
+| Conflict detection | Text similarity + LLM | Vector similarity + LLM | Vector similarity + LLM |
+
+When both keys are set, Anthropic is used for all LLM calls and OpenAI for embeddings. With only an Anthropic key, conflict detection uses word-based text similarity instead of vector search — still effective, just less semantic.
 
 ## Quick Start (Docker)
 
@@ -38,13 +53,17 @@ cp .env.example .env
 Edit `.env` with your API keys:
 
 ```env
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
+# At least one LLM key is required
+ANTHROPIC_API_KEY=sk-ant-...       # Recommended — used for all LLM operations
+OPENAI_API_KEY=sk-...              # Optional — adds vector embeddings for semantic search
 
 # Slack (optional — skip if not using the Slack surface)
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 SLACK_APP_TOKEN=xapp-...
+
+# Internal auth (set to any random string)
+INTERNAL_SECRET=change-me-to-something-random
 ```
 
 ### 2. Start everything
@@ -74,8 +93,7 @@ For contributors working on Lock itself.
 - **Node.js** 20+
 - **pnpm** 9+
 - **Docker** (for PostgreSQL)
-- **OpenAI API key** — generates embeddings for conflict detection
-- **Anthropic API key** — classifies conflicts via Claude
+- **Anthropic API key** and/or **OpenAI API key** — at least one is required
 
 Optional:
 - **Slack workspace** with permissions to create apps (for the Slack bot surface)
@@ -99,10 +117,10 @@ Edit `.env` with your keys:
 ```env
 DATABASE_URL=postgresql://lock:lock@localhost:5432/lock
 
-OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...              # Optional — for vector embeddings
 
-# Slack (optional — skip if not using the Slack surface)
+# Slack (optional)
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 SLACK_APP_TOKEN=xapp-...
@@ -142,25 +160,54 @@ pnpm dev
 # Or individually:
 pnpm dev:core    # Core API on :3000
 pnpm dev:slack   # Slack bot on :3001
+pnpm dev:cli     # CLI in dev mode
+pnpm dev:mcp     # MCP server in dev mode
+```
+
+### 7. Run tests
+
+```bash
+pnpm test            # All tests
+pnpm test:unit       # Unit tests only
+pnpm test:e2e        # E2e tests (requires DATABASE_URL)
 ```
 
 ## Slack app setup
 
-Create a new app at https://api.slack.com/apps:
+You can create a Slack app using the included manifest file (`slack-app-manifest.yml`):
 
-**Bot Token Scopes:**
-- `app_mentions:read` — detect `@lock` mentions
-- `channels:history` — read thread context
-- `channels:read` — get channel info
-- `chat:write` — post responses and notifications
-- `users:read` — resolve user display names
+1. Go to https://api.slack.com/apps
+2. Click **Create New App** > **From a manifest**
+3. Select your workspace, paste the contents of `slack-app-manifest.yml`, and create
+4. Under **Install App**, install to your workspace
+5. Copy the tokens into `.env`:
+   - **Bot User OAuth Token** (`xoxb-...`) -> `SLACK_BOT_TOKEN`
+   - **Signing Secret** (under Basic Information) -> `SLACK_SIGNING_SECRET`
+   - **App-Level Token** (generate one with `connections:write` scope) -> `SLACK_APP_TOKEN`
 
-**Event Subscriptions:**
-- `app_mention`
+### Slack commands
 
-**Socket Mode:** Enable for local development. This uses the `SLACK_APP_TOKEN` (`xapp-...`).
+| Command | Description |
+|---------|-------------|
+| `@lock <message>` | Commit a decision directly |
+| `@lock <message> --scope major` | Commit with scope (minor/major/architectural) |
+| `@lock <message> --type technical` | Commit with explicit type |
+| `@lock this` / `@lock that` | Extract decision from thread (requires thread) |
+| `@lock the fact that <message>` | Polish mode — LLM cleans up your phrasing |
+| `@lock init --product <p> --feature <f>` | Link channel to product + feature |
+| `@lock log` | List recent decisions |
+| `@lock log --type technical` | Filter by decision type |
+| `@lock recap` | Summary of active decisions with stats |
+| `@lock recap --since 30d` | Recap over a time period |
+| `@lock search "<query>"` | Semantic search |
+| `@lock import --days 7` | Scan channel history for decisions |
+| `@lock digest --schedule weekly --hour 9` | Schedule automated recaps |
+| `@lock revert <id> "reason"` | Revert a decision |
+| `@lock link <id> <ref>` | Add external link (Jira, Figma, etc.) |
+| `@lock products` | List products |
+| `@lock features` | List features |
 
-After creating the app, install it to your workspace and copy the tokens into `.env`.
+After committing, each lock message includes enrichment buttons: scope dropdown, Add Jira, Add Figma, Add Tags.
 
 ## CLI setup
 
@@ -203,7 +250,8 @@ This creates `.lock/config.json` in the current directory. Now you can commit de
 ```bash
 lock "Use notional value instead of margin for position display"
 lock log
-lock export          # generates LOCK.md with all active decisions
+lock recap              # summary with type/scope breakdown
+lock export             # generates LOCK.md with all active decisions
 ```
 
 ### CLI commands
@@ -211,10 +259,12 @@ lock export          # generates LOCK.md with all active decisions
 | Command | Description |
 |---------|-------------|
 | `lock "<message>"` | Commit a decision |
-| `lock log` | List recent decisions |
+| `lock commit <msg> --scope major --type technical` | Commit with options |
+| `lock log [--type] [--scope] [--product] [--feature]` | List recent decisions |
 | `lock show <id>` | Show a single decision |
 | `lock search "<query>"` | Semantic search |
 | `lock check "<intent>"` | Check for constraints before building |
+| `lock recap [--product] [--since]` | Recap with stats and breakdown |
 | `lock revert <id>` | Revert a decision |
 | `lock link <id> <ref>` | Add an external link |
 | `lock export` | Export active decisions to `LOCK.md` |
@@ -236,24 +286,7 @@ The MCP server lets AI coding tools read and write decisions. Add it to your too
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@uselock/mcp-server"],
-      "env": {
-        "LOCK_API_URL": "http://localhost:3000",
-        "LOCK_API_KEY": "lk_your_api_key"
-      }
-    }
-  }
-}
-```
-
-**Cursor** (`.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "lock": {
-      "command": "npx",
-      "args": ["@uselock/mcp-server"],
+      "args": ["@uselock/mcp"],
       "env": {
         "LOCK_API_URL": "http://localhost:3000",
         "LOCK_API_KEY": "lk_your_api_key"
@@ -267,15 +300,40 @@ The MCP server lets AI coding tools read and write decisions. Add it to your too
 
 | Tool | Description |
 |------|-------------|
-| `lock_context` | Get all active decisions as formatted text. Use before building. |
-| `lock_check` | Search for decisions relevant to what you're about to build. |
-| `lock_commit` | Record a new decision. |
-| `lock_query` | Query decisions with filters. |
+| `lock_context` | All active decisions as formatted markdown. Separates architectural constraints from other decisions. |
+| `lock_check` | Pre-build constraint check. Splits results into blocking (architectural/major) and informational (minor). |
+| `lock_commit` | Record a new decision (auto-classified with decision type). |
+| `lock_recap` | Summary of recent decisions with scope/type breakdown and top contributors. |
+| `lock_query` | Query decisions with filters (product, feature, scope, status, type, tags). |
 | `lock_get` | Get a single decision by ID. |
 | `lock_get_lineage` | Get the supersession/revert chain for a decision. |
 | `lock_search_semantic` | Semantic search across decisions. |
 | `lock_list_products` | List all products. |
 | `lock_list_features` | List features, optionally filtered by product. |
+
+## GitHub Action
+
+Lock includes a standalone GitHub Action that comments on PRs with relevant locked decisions.
+
+```yaml
+# .github/workflows/lock-check.yml
+name: Lock Decision Check
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: uselock/lock/actions/check-decisions@main
+        with:
+          lock-api-url: ${{ secrets.LOCK_API_URL }}
+          lock-api-key: ${{ secrets.LOCK_API_KEY }}
+          product: trading  # optional
+```
+
+The action searches for decisions relevant to the PR title and body, and posts an advisory comment listing related locks.
 
 ## API
 
@@ -284,38 +342,76 @@ All endpoints are under `/api/v1/`. Auth via `Authorization: Bearer <api_key>`.
 ### Locks
 
 ```
-POST   /api/v1/locks                  # Commit a decision
-GET    /api/v1/locks                  # List/filter (query: product, feature, scope, status, limit, offset)
-GET    /api/v1/locks/:shortId         # Get one decision
-POST   /api/v1/locks/:shortId/revert  # Revert a decision
-POST   /api/v1/locks/:shortId/link    # Add an external link
-POST   /api/v1/locks/search           # Semantic search (body: { query, product?, feature? })
+POST   /api/v1/locks                    # Commit a decision
+GET    /api/v1/locks                    # List/filter (query: product, feature, scope, status, decision_type, limit, offset)
+POST   /api/v1/locks/pre-check          # Check for conflicts before committing
+POST   /api/v1/locks/extract            # Extract a decision from thread context (LLM)
+POST   /api/v1/locks/extract-batch      # Batch extract decisions from messages (LLM)
+POST   /api/v1/locks/search             # Semantic search (body: { query, product?, feature? })
+GET    /api/v1/locks/recap              # Recap with stats (query: product?, since?, limit?)
+GET    /api/v1/locks/:shortId           # Get one decision
+PATCH  /api/v1/locks/:shortId           # Update scope, tags, or decision_type
+GET    /api/v1/locks/:shortId/lineage   # Get supersession/revert chain
+POST   /api/v1/locks/:shortId/revert    # Revert a decision
+POST   /api/v1/locks/:shortId/link      # Add an external link
 ```
 
 ### Products & Features
 
 ```
-GET    /api/v1/products               # List products with decision counts
-POST   /api/v1/products               # Create a product
-GET    /api/v1/features               # List features (query: product)
-POST   /api/v1/features               # Create a feature
+GET    /api/v1/products                 # List products with decision counts
+POST   /api/v1/products                 # Create a product
+PATCH  /api/v1/products/:slug           # Update name/description
+GET    /api/v1/features                 # List features (query: product)
+POST   /api/v1/features                 # Create a feature
+PATCH  /api/v1/features/:slug           # Update name/description
 ```
 
 Products and features are auto-created on first reference — no admin step needed.
+
+### Decision types
+
+Every decision is automatically classified by the LLM into one of 5 types:
+
+| Type | Description |
+|------|-------------|
+| `product` | User-facing features, behavior, requirements |
+| `technical` | Engineering, infrastructure, architecture, tooling |
+| `business` | Pricing, strategy, metrics, KPIs |
+| `design` | UI/UX, visual design, branding |
+| `process` | Team workflow, methodology, documentation |
+
+Override with `--type <type>` on any surface, or filter with `--type` in log/query.
+
+## Conflict detection
+
+When committing a decision, Lock checks for existing decisions that may conflict:
+
+1. **Pre-check** (Slack) — Before committing, Lock searches for similar active decisions in the same product. If conflicts are found, the user sees a warning with the conflicting decisions and an LLM-generated explanation. They can choose to **Commit anyway** or **Cancel**.
+
+2. **Post-commit** (CLI, MCP, API) — After committing, conflicts and supersessions are detected and returned in the response.
+
+Detection uses **vector similarity** (pgvector + OpenAI embeddings) when available, or **text similarity** (word-based Jaccard) as a fallback. Both paths use the LLM to classify the relationship and explain the conflict.
 
 ## Project structure
 
 ```
 lock/
 ├── packages/
-│   ├── core/          # Fastify API — all business logic
-│   ├── slack/         # Slack bot (@slack/bolt)
-│   ├── cli/           # Terminal client (commander.js)
-│   └── mcp/           # MCP server for AI agents
-├── Dockerfile         # Multi-stage build for production
-├── docker-compose.yml # PostgreSQL + pgvector + Lock app
-├── .env.example       # Environment template
-└── CLAUDE.md          # Full architecture spec
+│   ├── core/                # Fastify API — all business logic
+│   ├── slack/               # Slack bot (@slack/bolt, socket mode)
+│   ├── cli/                 # Terminal client (commander.js)
+│   └── mcp/                 # MCP server for AI agents
+├── actions/
+│   └── check-decisions/     # GitHub Action (standalone, built with ncc)
+├── scripts/
+│   ├── docker-entrypoint.sh # Waits for PG, runs schema push, starts services
+│   └── init-db.sql          # Enables pgvector + pgcrypto extensions
+├── Dockerfile               # Multi-stage build for production
+├── docker-compose.yml       # PostgreSQL + pgvector + Lock app
+├── slack-app-manifest.yml   # Slack app manifest for easy setup
+├── .env.example             # Environment template
+└── CLAUDE.md                # Full architecture spec
 ```
 
 ## Stopping services

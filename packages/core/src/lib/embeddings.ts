@@ -14,10 +14,15 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
     return null;
   }
 
-  const response = await getClient().embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text,
-  });
+  try {
+    const response = await getClient().embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text,
+    });
 
-  return response.data[0].embedding;
+    return response.data[0].embedding;
+  } catch {
+    // Gracefully degrade if OpenAI key is invalid or API fails
+    return null;
+  }
 }

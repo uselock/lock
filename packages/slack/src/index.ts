@@ -10,6 +10,8 @@ import { handleRevert } from './commands/revert.js';
 import { handleLink } from './commands/link.js';
 import { handleSearch } from './commands/search.js';
 import { handleRecap } from './commands/recap.js';
+import { handleDigest } from './commands/digest.js';
+import { handleImport } from './commands/import.js';
 import { formatError } from './lib/formatters.js';
 import { registerConfirmCommit } from './actions/confirm-commit.js';
 import { registerEditDecision } from './actions/edit-decision.js';
@@ -17,6 +19,9 @@ import { registerCancelExtract } from './actions/cancel-extract.js';
 import { registerChangeScope } from './actions/change-scope.js';
 import { registerAddLink } from './actions/add-link.js';
 import { registerAddTags } from './actions/add-tags.js';
+import { registerImportCommit } from './actions/import-commit.js';
+import { registerForceCommit } from './actions/force-commit.js';
+import { startDigestScheduler } from './services/digest-scheduler.js';
 
 const LOCK_API_URL = process.env.LOCK_API_URL || 'http://localhost:3000';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
@@ -149,6 +154,21 @@ app.event('app_mention', async ({ event, client, say }) => {
         blocks = await handleRecap(command, channelId, teamCallApi);
         break;
 
+      case 'digest':
+        blocks = await handleDigest(command, channelId, teamCallApi);
+        break;
+
+      case 'import':
+        blocks = await handleImport(command, {
+          channelId,
+          userId,
+          userName,
+          teamId: teamId || '',
+          client,
+          callApi: teamCallApi,
+        });
+        break;
+
       case 'describe':
         blocks = await handleDescribe(command, teamCallApi);
         break;
@@ -233,20 +253,32 @@ async function handleDescribe(command: any, callApi: Function): Promise<any[]> {
 }
 
 // Register interactive action handlers
-// Use a non-team-scoped callApi for action handlers (team ID comes from the action context)
-const globalCallApi = (method: string, path: string, body?: any) =>
-  callApi(method, path, body);
-
-registerConfirmCommit(app, globalCallApi);
-registerEditDecision(app, globalCallApi);
+// Pass raw callApi — each handler extracts teamId from the Slack event body
+registerConfirmCommit(app, callApi);
+registerEditDecision(app, callApi);
 registerCancelExtract(app);
-registerChangeScope(app, globalCallApi);
-registerAddLink(app, globalCallApi);
-registerAddTags(app, globalCallApi);
+registerChangeScope(app, callApi);
+registerAddLink(app, callApi);
+registerAddTags(app, callApi);
+registerImportCommit(app, callApi);
+registerForceCommit(app, callApi);
 
 // Start the app
 (async () => {
   await app.start(SLACK_PORT);
   console.log(`Lock Slack bot is running on port ${SLACK_PORT}`);
   console.log(`Core API: ${LOCK_API_URL}`);
+
+  // Start digest scheduler
+  startDigestScheduler(
+    (method: string, path: string, body?: any) => callApi(method, path, body),
+    async (channelId: string, blocks: any[]) => {
+      await app.client.chat.postMessage({
+        token: process.env.SLACK_BOT_TOKEN,
+        channel: channelId,
+        blocks,
+        text: 'Lock digest',
+      });
+    },
+  );
 })();

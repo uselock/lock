@@ -1,11 +1,31 @@
 import type { ParsedCommand } from '../types.js';
-import { formatRecap, formatError } from '../lib/formatters.js';
+import { formatRecapDigest, formatError } from '../lib/formatters.js';
 
 /**
- * Handle `@lock recap` — show all active decisions grouped by feature.
+ * Parse a --since value like "7d", "30d", or an ISO date into an ISO date string.
+ */
+function parseSince(value: string): string {
+  const dayMatch = value.match(/^(\d+)d$/);
+  if (dayMatch) {
+    const days = parseInt(dayMatch[1], 10);
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  }
+  // Try as ISO date
+  const date = new Date(value);
+  if (!isNaN(date.getTime())) {
+    return date.toISOString();
+  }
+  // Default: 7 days
+  return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * Handle `@lock recap` — show aggregated decision summary.
  *
- * Resolves the product from --product flag or channel config.
- * Optionally filters by --feature.
+ * Supports:
+ * - --product <slug> (or falls back to channel config)
+ * - --since <7d|30d|ISO date>
+ * - Org-wide recap if no product specified and no channel config
  */
 export async function handleRecap(
   command: ParsedCommand,
@@ -24,27 +44,18 @@ export async function handleRecap(
         product = configResponse.data.product_slug;
       }
     } catch {
-      // Channel not configured — product stays undefined
+      // Channel not configured — org-wide recap
     }
   }
 
-  if (!product) {
-    return formatError(
-      'NO_PRODUCT',
-      'Specify `--product <slug>` or run `@lock init` in this channel first.',
-    );
-  }
-
   const params = new URLSearchParams();
-  params.set('status', 'active');
-  params.set('product', product);
-  params.set('limit', '100');
-
-  if (command.flags.feature) {
-    params.set('feature', command.flags.feature);
+  if (product) params.set('product', product);
+  if (command.flags.since) {
+    params.set('since', parseSince(command.flags.since));
   }
 
-  const path = `/api/v1/locks?${params.toString()}`;
+  const queryString = params.toString();
+  const path = `/api/v1/locks/recap${queryString ? `?${queryString}` : ''}`;
 
   try {
     const response = await callApi('GET', path);
@@ -53,9 +64,9 @@ export async function handleRecap(
       return formatError(response.error.code || 'RECAP_FAILED', response.error.message);
     }
 
-    const locks = response.data?.locks || response.locks || response.data || [];
-    return formatRecap(Array.isArray(locks) ? locks : [], product);
+    const recap = response.data || response;
+    return formatRecapDigest(recap, product);
   } catch (err: any) {
-    return formatError('RECAP_FAILED', err.message || 'Failed to fetch locks.');
+    return formatError('RECAP_FAILED', err.message || 'Failed to fetch recap.');
   }
 }

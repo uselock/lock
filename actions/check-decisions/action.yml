@@ -1,0 +1,28 @@
+name: 'Lock Decision Check'
+description: 'Check PRs against locked product decisions and post advisory comments'
+branding:
+  icon: 'lock'
+  color: 'blue'
+
+inputs:
+  lock-api-url:
+    description: 'Lock API base URL (e.g. https://lock.example.com)'
+    required: true
+  lock-api-key:
+    description: 'Lock API key for authentication'
+    required: true
+  product:
+    description: 'Product slug to scope the search (optional)'
+    required: false
+  comment-threshold:
+    description: 'Minimum number of relevant decisions to post a comment'
+    required: false
+    default: '1'
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

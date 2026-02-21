@@ -51,6 +51,31 @@ describe('parseCommand', () => {
     expect(result.flags.feature).toBe('margin');
   });
 
+  it('parses --type flag', () => {
+    const result = parseCommand('<@U123> Use Redis --type technical');
+    expect(result.flags.type).toBe('technical');
+    expect(result.message).toBe('Use Redis');
+  });
+
+  it('parses --since flag on recap', () => {
+    const result = parseCommand('<@U123> recap --since 7d');
+    expect(result.subcommand).toBe('recap');
+    expect(result.flags.since).toBe('7d');
+  });
+
+  it('parses --days flag on import', () => {
+    const result = parseCommand('<@U123> import --days 14');
+    expect(result.subcommand).toBe('import');
+    expect(result.flags.days).toBe('14');
+  });
+
+  it('parses digest with --schedule and --hour', () => {
+    const result = parseCommand('<@U123> digest --schedule weekly --hour 9');
+    expect(result.subcommand).toBe('digest');
+    expect(result.flags.schedule).toBe('weekly');
+    expect(result.flags.hour).toBe('9');
+  });
+
   it('handles quoted message', () => {
     const result = parseCommand('<@U123> "Use Redis for caching"');
     expect(result.subcommand).toBe('commit');

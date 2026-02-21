@@ -11,6 +11,7 @@ import { registerSearchSemantic } from './tools/search-semantic.js';
 import { registerCommit } from './tools/commit.js';
 import { registerContext } from './tools/context.js';
 import { registerCheck } from './tools/check.js';
+import { registerRecap } from './tools/recap.js';
 
 const server = new McpServer({
   name: 'lock',
@@ -27,6 +28,7 @@ registerSearchSemantic(server);
 registerCommit(server);
 registerContext(server);
 registerCheck(server);
+registerRecap(server);
 
 // Connect via stdio transport
 async function main() {

@@ -43,7 +43,8 @@ export const checkCommand = new Command('check')
           ? new Date(lock.created_at).toLocaleDateString()
           : '';
 
-        console.log(`${i + 1}. ${scopeFn(`[${lock.scope}]`)} ${chalk.cyan(lock.short_id)}: ${lock.message}`);
+        const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+        console.log(`${i + 1}. ${scopeFn(`[${lock.scope}]`)}${typeBadge} ${chalk.cyan(lock.short_id)}: ${lock.message}`);
         console.log(`   ${chalk.dim(`Feature: ${featureSlug} | Author: ${authorName} | ${date}`)}`);
         console.log('');
       });

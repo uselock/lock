@@ -45,6 +45,10 @@ export function formatLock(lock: any): string {
   const feature = lock.feature?.name ?? lock.feature?.slug ?? '';
   lines.push(`  ${chalk.dim('Product:')} ${product}  ${chalk.dim('Feature:')} ${feature}`);
 
+  if (lock.decision_type) {
+    lines.push(`  ${chalk.dim('Type:')}    ${lock.decision_type}`);
+  }
+
   const authorName = lock.author?.name ?? lock.author_name ?? 'unknown';
   const authorSource = lock.author?.source ?? lock.author_source ?? '';
   lines.push(`  ${chalk.dim('Author:')}  ${authorName} ${chalk.dim('via')} ${authorSource}`);

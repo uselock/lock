@@ -9,6 +9,8 @@ export interface ParsedCommand {
     | 'search'
     | 'describe'
     | 'recap'
+    | 'digest'
+    | 'import'
     | 'commit';
   mode: 'explicit' | 'extract' | 'polish';
   message: string;
@@ -19,6 +21,11 @@ export interface ParsedCommand {
     also?: string;
     product?: string;
     feature?: string;
+    type?: string;
+    since?: string;
+    schedule?: string;
+    hour?: string;
+    days?: string;
   };
   args: string[]; // positional arguments like short_id for revert/link
 }

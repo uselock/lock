@@ -11,7 +11,7 @@ export function registerAddTags(app: any, callApi: Function) {
       view: {
         type: 'modal',
         callback_id: 'add_tags_submit',
-        private_metadata: JSON.stringify({ short_id: action.value }),
+        private_metadata: JSON.stringify({ short_id: action.value, teamId: body.team?.id || '' }),
         title: { type: 'plain_text', text: 'Add Tags' },
         submit: { type: 'plain_text', text: 'Save' },
         blocks: [
@@ -45,7 +45,7 @@ export function registerAddTags(app: any, callApi: Function) {
     if (tags.length === 0) return;
 
     try {
-      await callApi('PATCH', `/api/v1/locks/${metadata.short_id}`, { tags });
+      await callApi('PATCH', `/api/v1/locks/${metadata.short_id}`, { tags }, metadata.teamId || view.team_id || '');
     } catch {
       // Modal already closed — best-effort
     }

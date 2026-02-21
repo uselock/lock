@@ -275,6 +275,122 @@ describe.skipIf(!hasDb)('Core API e2e', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  // --- Decision type ---
+
+  it('commits a lock with explicit decision_type', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/locks',
+      headers: { authorization: seed.authHeader },
+      payload: {
+        message: 'Use WebSocket for real-time updates',
+        product: createdProductSlug,
+        feature: createdFeatureSlug,
+        scope: 'major',
+        decision_type: 'technical',
+        tags: ['realtime'],
+        author: { type: 'human', id: 'test-user', name: 'tester', source: 'api' },
+        source: { type: 'api', ref: 'test-suite' },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const lock = res.json().data.lock;
+    expect(lock.decision_type).toBe('technical');
+  });
+
+  it('filters locks by decision_type', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/locks?decision_type=technical`,
+      headers: { authorization: seed.authHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const locks = res.json().data.locks;
+    expect(Array.isArray(locks)).toBe(true);
+    expect(locks.every((l: any) => l.decision_type === 'technical')).toBe(true);
+  });
+
+  it('PATCHes decision_type on a lock', async () => {
+    // First create a fresh lock to update
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/locks',
+      headers: { authorization: seed.authHeader },
+      payload: {
+        message: 'Use dark theme as default',
+        product: createdProductSlug,
+        feature: createdFeatureSlug,
+        scope: 'minor',
+        decision_type: 'design',
+        author: { type: 'human', id: 'test-user', name: 'tester', source: 'api' },
+        source: { type: 'api', ref: 'test-suite' },
+      },
+    });
+    const shortId = createRes.json().data.lock.short_id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/locks/${shortId}`,
+      headers: { authorization: seed.authHeader },
+      payload: { decision_type: 'business' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.lock.decision_type).toBe('business');
+  });
+
+  it('rejects invalid decision_type', async () => {
+    // Create another fresh lock
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/locks',
+      headers: { authorization: seed.authHeader },
+      payload: {
+        message: 'Temp lock for validation test',
+        product: createdProductSlug,
+        feature: createdFeatureSlug,
+        author: { type: 'human', id: 'test-user', name: 'tester', source: 'api' },
+        source: { type: 'api', ref: 'test-suite' },
+      },
+    });
+    const shortId = createRes.json().data.lock.short_id;
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/locks/${shortId}`,
+      headers: { authorization: seed.authHeader },
+      payload: { decision_type: 'invalid_type' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  // --- Recap ---
+
+  it('returns a recap summary', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/locks/recap',
+      headers: { authorization: seed.authHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const recap = res.json().data;
+    expect(recap.period).toBeDefined();
+    expect(recap.summary).toBeDefined();
+    expect(typeof recap.summary.total_decisions).toBe('number');
+    expect(recap.decisions).toBeDefined();
+    expect(recap.top_contributors).toBeDefined();
+  });
+
+  it('returns recap filtered by product', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/locks/recap?product=${createdProductSlug}`,
+      headers: { authorization: seed.authHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const recap = res.json().data;
+    expect(recap.summary.total_decisions).toBeGreaterThanOrEqual(0);
+  });
+
   // --- Channel configs ---
 
   it('creates a channel config', async () => {

@@ -9,6 +9,7 @@ export const logCommand = new Command('log')
   .option('--product <slug>', 'Filter by product')
   .option('--feature <slug>', 'Filter by feature')
   .option('--scope <scope>', 'Filter by scope: minor, major, architectural')
+  .option('--type <type>', 'Filter by decision type: product, technical, business, design, process')
   .option('--status <status>', 'Filter by status: active, superseded, reverted, proposed')
   .option('--limit <n>', 'Max number of results', '20')
   .action(async (opts) => {
@@ -23,6 +24,7 @@ export const logCommand = new Command('log')
     if (product) params.set('product', product);
     if (feature) params.set('feature', feature);
     if (opts.scope) params.set('scope', opts.scope);
+    if (opts.type) params.set('decision_type', opts.type);
     if (opts.status) params.set('status', opts.status);
     if (opts.limit) params.set('limit', opts.limit);
 

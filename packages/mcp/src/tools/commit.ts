@@ -16,12 +16,16 @@ export function registerCommit(server: McpServer): void {
         .optional()
         .describe('Scope of the decision (default: minor)'),
       tags: z.array(z.string()).optional().describe('Tags for categorizing the decision'),
+      decision_type: z
+        .enum(['product', 'technical', 'business', 'design', 'process'])
+        .optional()
+        .describe('Decision type (auto-inferred if not provided)'),
       source: z
         .string()
         .optional()
         .describe('Source reference (e.g. session ID, URL)'),
     },
-    async ({ message, product, feature, scope, tags, source }) => {
+    async ({ message, product, feature, scope, tags, decision_type, source }) => {
       try {
         const body: Record<string, unknown> = {
           message,
@@ -41,6 +45,7 @@ export function registerCommit(server: McpServer): void {
         if (feature) body.feature = feature;
         if (scope) body.scope = scope;
         if (tags && tags.length > 0) body.tags = tags;
+        if (decision_type) body.decision_type = decision_type;
 
         const result = await apiPost<CommitResponse>('/api/v1/locks', body);
         return {

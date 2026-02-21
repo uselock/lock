@@ -41,22 +41,54 @@ function formatContext(locks: Lock[], product?: string): string {
   const featureCount = byFeature.size;
   const today = new Date().toISOString().slice(0, 10);
 
+  // Type breakdown
+  const typeCounts: Record<string, number> = {};
+  for (const lock of locks) {
+    if (lock.decision_type) {
+      typeCounts[lock.decision_type] = (typeCounts[lock.decision_type] || 0) + 1;
+    }
+  }
+  const typeBreakdown = Object.entries(typeCounts)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
   const lines: string[] = [];
   lines.push(`# Active Decisions — ${productName}`);
   lines.push(
     `Generated: ${today} | ${locks.length} decisions across ${featureCount} feature${featureCount === 1 ? '' : 's'}`,
   );
+  if (typeBreakdown) {
+    lines.push(`Types: ${typeBreakdown}`);
+  }
+
+  // Architectural constraints first
+  const archLocks = locks.filter(l => l.scope === 'architectural');
+  if (archLocks.length > 0) {
+    lines.push('');
+    lines.push('## ARCHITECTURAL CONSTRAINTS (must follow)');
+    lines.push('');
+    for (const lock of archLocks) {
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
+      lines.push(
+        `[${lock.scope}]${typeBadge} ${lock.short_id}: ${lock.message} (${lock.author.name}, ${formatDate(lock.created_at)})`,
+      );
+    }
+  }
 
   for (const [slug, group] of byFeature) {
     lines.push('');
     lines.push(`## ${slug} (${group.name})`);
     lines.push('');
     for (const lock of group.locks) {
+      const typeBadge = lock.decision_type ? ` [${lock.decision_type}]` : '';
       lines.push(
-        `[${lock.scope}] ${lock.short_id}: ${lock.message} (${lock.author.name}, ${formatDate(lock.created_at)})`,
+        `[${lock.scope}]${typeBadge} ${lock.short_id}: ${lock.message} (${lock.author.name}, ${formatDate(lock.created_at)})`,
       );
     }
   }
+
+  lines.push('');
+  lines.push('IMPORTANT: Before contradicting these decisions, use lock_check to verify and lock_commit to record a superseding decision.');
 
   return lines.join('\n');
 }

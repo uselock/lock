@@ -37,6 +37,7 @@ services:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-lock-internal-secret}
       LOCK_API_URL: http://localhost:3000
     restart: unless-stopped
 
