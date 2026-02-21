@@ -12,6 +12,7 @@ import { handleSearch } from './commands/search.js';
 import { handleRecap } from './commands/recap.js';
 import { handleDigest } from './commands/digest.js';
 import { handleImport } from './commands/import.js';
+import { handleKnowledge } from './commands/knowledge.js';
 import { formatError } from './lib/formatters.js';
 import { registerConfirmCommit } from './actions/confirm-commit.js';
 import { registerEditDecision } from './actions/edit-decision.js';
@@ -167,6 +168,10 @@ app.event('app_mention', async ({ event, client, say }) => {
           client,
           callApi: teamCallApi,
         });
+        break;
+
+      case 'knowledge':
+        blocks = await handleKnowledge(command, channelId, teamCallApi);
         break;
 
       case 'describe':

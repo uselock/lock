@@ -650,6 +650,85 @@ export function formatImportCandidates(candidates: any[], metadata: any): any[] 
 }
 
 /**
+ * Format synthesized knowledge for display.
+ */
+export function formatKnowledge(knowledge: any): any[] {
+  const blocks: any[] = [];
+
+  if (knowledge.message) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `:bulb: ${knowledge.message}` },
+    });
+    return blocks;
+  }
+
+  if (!knowledge.facets || knowledge.facets.length === 0) {
+    const scope = knowledge.feature
+      ? `${knowledge.product?.name || 'unknown'} / ${knowledge.feature?.name || 'unknown'}`
+      : knowledge.product?.name || 'unknown';
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `:bulb: No knowledge synthesized yet for *${scope}*. Commit some decisions first.` },
+    });
+    return blocks;
+  }
+
+  const scope = knowledge.feature
+    ? `${knowledge.product.name} / ${knowledge.feature.name}`
+    : knowledge.product.name;
+
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `:brain: *Knowledge — ${scope}*` },
+  });
+
+  const facetEmojis: Record<string, string> = {
+    summary: ':memo:',
+    principles: ':dart:',
+    tensions: ':warning:',
+    trajectory: ':chart_with_upwards_trend:',
+  };
+
+  const facetTitles: Record<string, string> = {
+    summary: 'Summary',
+    principles: 'Principles',
+    tensions: 'Tensions & Open Questions',
+    trajectory: 'Trajectory',
+  };
+
+  for (const entry of knowledge.facets) {
+    const emoji = facetEmojis[entry.facet] || ':bulb:';
+    const title = facetTitles[entry.facet] || entry.facet;
+
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `${emoji} *${title}*` },
+    });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: entry.content },
+    });
+  }
+
+  // Metadata
+  const first = knowledge.facets[0];
+  if (first) {
+    const date = first.updated_at ? new Date(first.updated_at).toLocaleDateString() : 'unknown';
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: `v${first.version} | ${first.lock_count_at_generation} decisions | Updated ${date}`,
+      }],
+    });
+  }
+
+  return blocks;
+}
+
+/**
  * Format an error response.
  */
 export function formatError(code: string, message: string): any[] {

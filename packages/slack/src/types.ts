@@ -11,6 +11,7 @@ export interface ParsedCommand {
     | 'recap'
     | 'digest'
     | 'import'
+    | 'knowledge'
     | 'commit';
   mode: 'explicit' | 'extract' | 'polish';
   message: string;

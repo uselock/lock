@@ -4,6 +4,7 @@ import { locks, lockLinks, products, features } from '../db/schema.js';
 import { generateShortId } from '../lib/id.js';
 import { detectConflicts } from './conflict-service.js';
 import { notifySlack } from './notify-service.js';
+import { updateKnowledgeIncremental } from './knowledge-service.js';
 import { inferDecisionType } from '../lib/llm.js';
 import type {
   CreateLockRequest,
@@ -155,6 +156,13 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
       featureId: lock.featureId,
     }).catch(() => {}); // Non-blocking
   }
+
+  // Update knowledge (fire-and-forget)
+  updateKnowledgeIncremental(workspaceId, product.id, feature.id, {
+    message: req.message,
+    scope: req.scope ?? 'minor',
+    decisionType: typeResult.decision_type || null,
+  }).catch(() => {});
 
   // Fetch links for response
   const links = await db.query.lockLinks.findMany({
@@ -359,6 +367,13 @@ export async function revertLock(
     .update(locks)
     .set({ status: 'reverted', revertedById: revertLock.id })
     .where(eq(locks.id, original.id));
+
+  // Update knowledge (fire-and-forget)
+  updateKnowledgeIncremental(workspaceId, original.productId, original.featureId, {
+    message: req.message,
+    scope: original.scope,
+    decisionType: null,
+  }).catch(() => {});
 
   const product = await db.query.products.findFirst({
     where: eq(products.id, original.productId),

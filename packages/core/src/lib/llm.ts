@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 
-import type { DecisionType } from '../types.js';
+import type { DecisionType, KnowledgeFacet } from '../types.js';
 import { VALID_DECISION_TYPES } from '../types.js';
 
 // --- Provider abstraction ---
@@ -221,6 +221,131 @@ export interface BatchDecision {
   tags: string[];
   confidence: number;
   reasoning: string;
+}
+
+// --- Knowledge synthesis ---
+
+const FACET_INSTRUCTIONS: Record<KnowledgeFacet, string> = {
+  summary: `Write a 2-3 paragraph overview of the current state and evolution of this area. Cover what has been decided, key themes, and how the area has evolved over time. Write in present tense, factual prose.`,
+  principles: `Extract a bullet list of constraints, invariants, and design rules that emerge from these decisions. Each principle should be a clear, actionable statement that a developer or product person could follow. Format as markdown bullet points.`,
+  tensions: `Identify open questions, unresolved debates, areas of flux, or potential contradictions in the decisions. These are things the team should be aware of but hasn't fully resolved. Format as markdown bullet points.`,
+  trajectory: `Based on the pattern of recent decisions, describe the direction this area is heading. What trends are emerging? What is the team moving toward or away from? Write 1-2 short paragraphs.`,
+};
+
+export async function synthesizeKnowledgeFacet(
+  facet: KnowledgeFacet,
+  existingContent: string | null,
+  newDecision: { message: string; scope: string; decisionType?: string | null },
+  recentDecisions: { message: string; scope: string; decisionType?: string | null }[],
+  productName: string,
+  featureName?: string,
+): Promise<string | null> {
+  if (!hasLLM()) return null;
+
+  const scope = featureName ? `${productName} / ${featureName}` : productName;
+  const recentContext = recentDecisions
+    .map((d, i) => `${i + 1}. [${d.scope}]${d.decisionType ? ` [${d.decisionType}]` : ''} ${d.message}`)
+    .join('\n');
+
+  const prompt = `You are synthesizing knowledge about product decisions for "${scope}".
+
+Facet: ${facet}
+${FACET_INSTRUCTIONS[facet]}
+
+${existingContent ? `Current ${facet}:\n${existingContent}\n` : `No existing ${facet} yet — create one from scratch.`}
+
+New decision just recorded:
+[${newDecision.scope}]${newDecision.decisionType ? ` [${newDecision.decisionType}]` : ''} ${newDecision.message}
+
+Recent decisions for context:
+${recentContext || 'None yet.'}
+
+Update the ${facet} to incorporate the new decision. Keep it concise and useful.
+
+Respond with JSON only: { "content": "..." }`;
+
+  try {
+    const text = await chatComplete(prompt, 1024);
+    const parsed = JSON.parse(text);
+    return typeof parsed.content === 'string' ? parsed.content : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function synthesizeKnowledgeFacetFull(
+  facet: KnowledgeFacet,
+  decisions: { message: string; scope: string; decisionType?: string | null; featureName?: string }[],
+  productName: string,
+  featureName?: string,
+): Promise<string | null> {
+  if (!hasLLM()) return null;
+
+  const scope = featureName ? `${productName} / ${featureName}` : productName;
+  const decisionContext = prepareDecisionContext(decisions);
+
+  const prompt = `You are synthesizing knowledge about product decisions for "${scope}".
+
+Facet: ${facet}
+${FACET_INSTRUCTIONS[facet]}
+
+All active decisions:
+${decisionContext}
+
+Generate the ${facet} from scratch based on all these decisions. Be comprehensive but concise.
+
+Respond with JSON only: { "content": "..." }`;
+
+  try {
+    const text = await chatComplete(prompt, 2048);
+    const parsed = JSON.parse(text);
+    return typeof parsed.content === 'string' ? parsed.content : null;
+  } catch {
+    return null;
+  }
+}
+
+function prepareDecisionContext(
+  decisions: { message: string; scope: string; decisionType?: string | null; featureName?: string }[],
+): string {
+  if (decisions.length <= 50) {
+    return decisions
+      .map((d, i) => {
+        const feature = d.featureName ? ` (${d.featureName})` : '';
+        return `${i + 1}. [${d.scope}]${d.decisionType ? ` [${d.decisionType}]` : ''}${feature} ${d.message}`;
+      })
+      .join('\n');
+  }
+
+  // For 51-200: keep architectural fully, summarize minor
+  const architectural = decisions.filter(d => d.scope === 'architectural');
+  const major = decisions.filter(d => d.scope === 'major');
+  const minor = decisions.filter(d => d.scope === 'minor');
+
+  const lines: string[] = [];
+  if (architectural.length > 0) {
+    lines.push('### Architectural decisions (full):');
+    architectural.forEach((d, i) => {
+      lines.push(`${i + 1}. [architectural]${d.decisionType ? ` [${d.decisionType}]` : ''} ${d.message}`);
+    });
+  }
+  if (major.length > 0) {
+    lines.push('\n### Major decisions (full):');
+    major.forEach((d, i) => {
+      lines.push(`${i + 1}. [major]${d.decisionType ? ` [${d.decisionType}]` : ''} ${d.message}`);
+    });
+  }
+  if (minor.length > 0) {
+    lines.push(`\n### Minor decisions (${minor.length} total, showing recent 20):`);
+    minor.slice(0, 20).forEach((d, i) => {
+      lines.push(`${i + 1}. [minor]${d.decisionType ? ` [${d.decisionType}]` : ''} ${d.message}`);
+    });
+    if (minor.length > 20) {
+      lines.push(`... and ${minor.length - 20} more minor decisions`);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 export async function extractDecisionsFromChunk(

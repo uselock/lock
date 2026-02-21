@@ -12,6 +12,7 @@ import { registerCommit } from './tools/commit.js';
 import { registerContext } from './tools/context.js';
 import { registerCheck } from './tools/check.js';
 import { registerRecap } from './tools/recap.js';
+import { registerKnowledge } from './tools/knowledge.js';
 
 const server = new McpServer({
   name: 'lock',
@@ -29,6 +30,7 @@ registerCommit(server);
 registerContext(server);
 registerCheck(server);
 registerRecap(server);
+registerKnowledge(server);
 
 // Connect via stdio transport
 async function main() {

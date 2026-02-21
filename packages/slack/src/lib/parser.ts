@@ -12,6 +12,7 @@ const KNOWN_SUBCOMMANDS = [
   'recap',
   'digest',
   'import',
+  'knowledge',
 ] as const;
 
 const SCOPE_VALUES = ['minor', 'major', 'architectural'] as const;

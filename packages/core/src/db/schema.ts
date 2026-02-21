@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   timestamp,
+  integer,
   index,
   unique,
   customType,
@@ -165,3 +166,29 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 });
+
+// Knowledge (synthesized product/feature understanding)
+export const knowledge = pgTable(
+  'knowledge',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id),
+    featureId: uuid('feature_id').references(() => features.id), // null = product-level
+    facet: text('facet').notNull(), // 'summary' | 'principles' | 'tensions' | 'trajectory'
+    content: text('content').notNull(),
+    version: integer('version').notNull().default(1),
+    lockCountAtGeneration: integer('lock_count_at_generation').notNull().default(0),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('idx_knowledge_product').on(table.productId),
+    index('idx_knowledge_feature').on(table.featureId),
+    unique('knowledge_product_feature_facet').on(table.productId, table.featureId, table.facet),
+  ]
+);

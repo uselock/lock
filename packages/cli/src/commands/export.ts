@@ -89,6 +89,7 @@ export const exportCommand = new Command('export')
   .option('--feature <slug>', 'Filter by feature')
   .option('--scope <scope>', 'Filter by scope: minor, major, architectural')
   .option('--output <path>', 'Output file path', 'LOCK.md')
+  .option('--with-knowledge', 'Include synthesized knowledge sections')
   .action(async (opts) => {
     const config = getConfig();
 
@@ -116,7 +117,35 @@ export const exportCommand = new Command('export')
         return;
       }
 
-      const markdown = generateMarkdown(locks);
+      let knowledgeSection = '';
+      if (opts.withKnowledge && product) {
+        try {
+          const kParams = new URLSearchParams();
+          kParams.set('product', product);
+          if (feature) kParams.set('feature', feature);
+          const knowledge = await apiGet<any>(`/api/v1/knowledge?${kParams.toString()}`);
+          if (knowledge.facets && knowledge.facets.length > 0) {
+            const facetTitles: Record<string, string> = {
+              summary: 'Summary',
+              principles: 'Principles',
+              tensions: 'Tensions & Open Questions',
+              trajectory: 'Trajectory',
+            };
+            const parts: string[] = ['## Knowledge\n'];
+            for (const entry of knowledge.facets) {
+              parts.push(`### ${facetTitles[entry.facet] ?? entry.facet}\n`);
+              parts.push(entry.content);
+              parts.push('');
+            }
+            parts.push('---\n');
+            knowledgeSection = parts.join('\n');
+          }
+        } catch {
+          // Knowledge not available — skip
+        }
+      }
+
+      const markdown = knowledgeSection + generateMarkdown(locks);
       fs.writeFileSync(opts.output, markdown, 'utf-8');
       console.log(
         chalk.green(

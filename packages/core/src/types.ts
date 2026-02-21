@@ -81,6 +81,23 @@ export interface SupersessionResult {
   explanation?: string;
 }
 
+export type KnowledgeFacet = 'summary' | 'principles' | 'tensions' | 'trajectory';
+export const KNOWLEDGE_FACETS: KnowledgeFacet[] = ['summary', 'principles', 'tensions', 'trajectory'];
+
+export interface KnowledgeEntry {
+  facet: KnowledgeFacet;
+  content: string;
+  version: number;
+  lock_count_at_generation: number;
+  updated_at: string;
+}
+
+export interface KnowledgeResponse {
+  product: { slug: string; name: string };
+  feature?: { slug: string; name: string };
+  facets: KnowledgeEntry[];
+}
+
 export interface ApiError {
   code: string;
   message: string;

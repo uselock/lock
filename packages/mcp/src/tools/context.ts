@@ -3,6 +3,21 @@ import { z } from 'zod';
 import { apiGet } from '../lib/api-client.js';
 import type { Lock } from '../lib/types.js';
 
+interface KnowledgeEntry {
+  facet: string;
+  content: string;
+  version: number;
+  lock_count_at_generation: number;
+  updated_at: string;
+}
+
+interface KnowledgeResult {
+  product: { slug: string; name: string };
+  feature?: { slug: string; name: string };
+  facets: KnowledgeEntry[];
+  message?: string;
+}
+
 const SCOPE_WEIGHT: Record<string, number> = {
   architectural: 0,
   major: 1,
@@ -112,7 +127,40 @@ export function registerContext(server: McpServer): void {
         const result = await apiGet<{ locks: Lock[] }>(
           `/api/v1/locks?${params.toString()}`,
         );
-        const text = formatContext(result.locks ?? [], product);
+
+        // Try to prepend knowledge summary + principles
+        let knowledgePreamble = '';
+        if (product) {
+          try {
+            const kParams = new URLSearchParams();
+            kParams.set('product', product);
+            if (feature) kParams.set('feature', feature);
+            const knowledge = await apiGet<KnowledgeResult>(
+              `/api/v1/knowledge?${kParams.toString()}`,
+            );
+            if (knowledge.facets && knowledge.facets.length > 0) {
+              const summary = knowledge.facets.find(f => f.facet === 'summary');
+              const principles = knowledge.facets.find(f => f.facet === 'principles');
+              if (summary || principles) {
+                const parts: string[] = [];
+                if (summary) {
+                  parts.push('## Product Understanding\n');
+                  parts.push(summary.content);
+                }
+                if (principles) {
+                  parts.push('\n## Key Principles\n');
+                  parts.push(principles.content);
+                }
+                parts.push('\n---\n');
+                knowledgePreamble = parts.join('\n');
+              }
+            }
+          } catch {
+            // Knowledge not available — continue without it
+          }
+        }
+
+        const text = knowledgePreamble + formatContext(result.locks ?? [], product);
         return {
           content: [{ type: 'text' as const, text }],
         };

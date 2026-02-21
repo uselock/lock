@@ -11,6 +11,7 @@ import { lockRoutes } from './routes/locks.js';
 import { productRoutes } from './routes/products.js';
 import { featureRoutes } from './routes/features.js';
 import { channelConfigRoutes } from './routes/channel-configs.js';
+import { knowledgeRoutes } from './routes/knowledge.js';
 import { authMiddleware } from './lib/auth.js';
 import { uiRoutes } from './routes/ui.js';
 
@@ -37,6 +38,7 @@ async function start() {
       await api.register(productRoutes, { prefix: '/products' });
       await api.register(featureRoutes, { prefix: '/features' });
       await api.register(channelConfigRoutes, { prefix: '/channel-configs' });
+      await api.register(knowledgeRoutes, { prefix: '/knowledge' });
     },
     { prefix: '/api/v1' }
   );
