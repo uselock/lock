@@ -246,6 +246,8 @@ export function formatLockCommit(data: any): any[] {
 
 /**
  * Format a list of locks for display.
+ * When locks span multiple products, groups by product with clear section headers
+ * so users can see at a glance which product each decision belongs to.
  */
 export function formatLockList(locks: any[]): any[] {
   const blocks: any[] = [];
@@ -261,40 +263,79 @@ export function formatLockList(locks: any[]): any[] {
     return blocks;
   }
 
+  const productCount = new Set(locks.map((l: any) => l.product?.slug || l.product || '')).size;
+  const headerText =
+    productCount > 1
+      ? `:lock: *${locks.length} lock${locks.length === 1 ? '' : 's'} found* (${productCount} products)`
+      : `:lock: *${locks.length} lock${locks.length === 1 ? '' : 's'} found*`;
+
   blocks.push({
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `:lock: *${locks.length} lock${locks.length === 1 ? '' : 's'} found*`,
+      text: headerText,
     },
   });
 
+  if (productCount > 1) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: 'Filter by product: `@lock log --product <slug>`',
+        },
+      ],
+    });
+  }
+
   blocks.push({ type: 'divider' });
 
+  // Group by product (slug) to show clear product boundaries
+  const byProduct = new Map<string, { name: string; slug: string; locks: any[] }>();
   for (const lock of locks) {
-    const scopeEmoji =
-      lock.scope === 'architectural' ? ':rotating_light:' :
-      lock.scope === 'major' ? ':large_orange_diamond:' :
-      ':small_blue_diamond:';
+    const slug = lock.product?.slug || lock.product || 'unknown';
+    const name = lock.product?.name || slug;
+    if (!byProduct.has(slug)) {
+      byProduct.set(slug, { name, slug, locks: [] });
+    }
+    byProduct.get(slug)!.locks.push(lock);
+  }
 
-    const statusBadge =
-      lock.status === 'active' ? '' :
-      lock.status === 'superseded' ? ' ~superseded~' :
-      lock.status === 'reverted' ? ' ~reverted~' :
-      ` _(${lock.status})_`;
-
-    const productSlug = lock.product?.slug || lock.product || '';
-    const featureSlug = lock.feature?.slug || lock.feature || '';
-    const scope = `${productSlug}/${featureSlug}`;
-    const typeBadge = lock.decision_type ? ` | ${lock.decision_type}` : '';
-
+  for (const group of byProduct.values()) {
+    // Product section header
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}${statusBadge}\n_${scope}${typeBadge} | ${lock.author?.name || lock.author_name || 'unknown'} | ${new Date(lock.created_at).toLocaleDateString()}_`,
+        text: `:package: *${group.name}* (\`${group.slug}\`)`,
       },
     });
+
+    for (const lock of group.locks) {
+      const scopeEmoji =
+        lock.scope === 'architectural' ? ':rotating_light:' :
+        lock.scope === 'major' ? ':large_orange_diamond:' :
+        ':small_blue_diamond:';
+
+      const statusBadge =
+        lock.status === 'active' ? '' :
+        lock.status === 'superseded' ? ' ~superseded~' :
+        lock.status === 'reverted' ? ' ~reverted~' :
+        ` _(${lock.status})_`;
+
+      const featureSlug = lock.feature?.slug || lock.feature || '';
+      const featureLabel = featureSlug ? `${featureSlug} | ` : '';
+      const typeBadge = lock.decision_type ? ` | ${lock.decision_type}` : '';
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${scopeEmoji} \`${lock.short_id}\` ${lock.message}${statusBadge}\n_${featureLabel}${lock.scope}${typeBadge} | ${lock.author?.name || lock.author_name || 'unknown'} | ${new Date(lock.created_at).toLocaleDateString()}_`,
+        },
+      });
+    }
   }
 
   return blocks;
