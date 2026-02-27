@@ -16,7 +16,7 @@ export const commitCommand = new Command('commit')
     const config = getConfig();
     if (!config) {
       console.error(chalk.red('Error: No .lock/config.json found.'));
-      console.error(chalk.dim('Run `lock init --product <slug> --feature <slug>` first to scope this directory.'));
+      console.error(chalk.dim('Run `lock init --product <slug>` first to scope this directory.'));
       process.exit(1);
     }
 
@@ -25,7 +25,7 @@ export const commitCommand = new Command('commit')
     const body: Record<string, unknown> = {
       message,
       product: config.product,
-      feature: config.feature,
+      feature: config.feature || 'main',
       scope: opts.scope,
       tags: opts.tag ?? [],
       author: {

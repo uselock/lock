@@ -118,3 +118,4 @@ Response:
 - [MCP Server](/docs/mcp) — AI agent integration guide
 - [REST API](/docs/api) — Full API reference for building integrations
 - [Self-Hosting](/docs/self-hosting) — Deploy Lock on your own infrastructure
+- [Deploying to Vercel](/docs/vercel) — Run the Core API on Vercel (Slack bot elsewhere)

@@ -33,19 +33,19 @@ export async function handleLock(
     if (configResponse.error) {
       return formatError(
         'CHANNEL_NOT_CONFIGURED',
-        'This channel is not linked to a product and feature.\nRun `@lock init --product <product> --feature <feature>` first.',
+        'This channel is not linked to a product.\nRun `@lock init --product <product>` first.',
       );
     }
     channelConfig = configResponse.data || configResponse;
   } catch {
     return formatError(
       'CHANNEL_NOT_CONFIGURED',
-      'This channel is not linked to a product and feature.\nRun `@lock init --product <product> --feature <feature>` first.',
+      'This channel is not linked to a product.\nRun `@lock init --product <product>` first.',
     );
   }
 
   const product = channelConfig.product?.slug || channelConfig.product;
-  const feature = channelConfig.feature?.slug || channelConfig.feature;
+  const feature = channelConfig.feature?.slug || channelConfig.feature || 'main';
 
   // Get thread context if in a thread
   let threadContext: any = null;
@@ -194,6 +194,8 @@ async function handlePolishMode(
 
 /**
  * Explicit mode: Direct commit with the user's message and flags.
+ * When thread context is available, we enrich the message via extract (polish) so the
+ * committed decision is self-contained (resolves "option A", adds topic/ticket from thread).
  */
 async function handleExplicitMode(
   command: ParsedCommand,
@@ -206,24 +208,52 @@ async function handleExplicitMode(
     );
   }
 
+  let message = command.message;
+  let inferredScope = command.flags.scope;
+  let inferredTags = command.flags.tags.length > 0 ? command.flags.tags : undefined;
+  let inferredType = command.flags.type;
+
+  // When we have thread context, enrich the message via extract (polish) so the decision
+  // is self-contained (e.g. "option A" → "Keep the attribution logo", add topic/ticket).
+  if (ctx.source?.context) {
+    try {
+      const extractResponse = await ctx.callApi('POST', '/api/v1/locks/extract', {
+        thread_context: ctx.source.context,
+        user_hint: command.message,
+        product: ctx.product,
+        feature: ctx.feature,
+      });
+      if (!extractResponse.error && extractResponse.data?.decision) {
+        message = extractResponse.data.decision;
+        if (!inferredScope) inferredScope = extractResponse.data.scope;
+        if (!inferredTags?.length && Array.isArray(extractResponse.data.tags))
+          inferredTags = extractResponse.data.tags;
+        if (!inferredType && extractResponse.data.decision_type)
+          inferredType = extractResponse.data.decision_type;
+      }
+    } catch {
+      // Keep original message and flags on extract failure
+    }
+  }
+
   const body: any = {
-    message: command.message,
+    message,
     product: ctx.product,
     feature: ctx.feature,
     author: ctx.author,
     source: ctx.source,
   };
 
-  if (command.flags.scope) {
-    body.scope = command.flags.scope;
+  if (inferredScope) {
+    body.scope = inferredScope;
   }
 
-  if (command.flags.tags.length > 0) {
-    body.tags = command.flags.tags;
+  if (inferredTags?.length) {
+    body.tags = inferredTags;
   }
 
-  if (command.flags.type) {
-    body.decision_type = command.flags.type;
+  if (inferredType) {
+    body.decision_type = inferredType;
   }
 
   if (command.flags.ticket) {
@@ -233,10 +263,10 @@ async function handleExplicitMode(
   try {
     // Pre-check for conflicts before committing
     const preCheck = await ctx.callApi('POST', '/api/v1/locks/pre-check', {
-      message: command.message,
+      message,
       product: ctx.product,
       feature: ctx.feature,
-      scope: command.flags.scope || 'minor',
+      scope: inferredScope || 'minor',
     });
 
     const checkResult = preCheck.data || preCheck;

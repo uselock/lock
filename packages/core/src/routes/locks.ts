@@ -26,9 +26,9 @@ export async function lockRoutes(fastify: FastifyInstance) {
   fastify.post('/', async (request, reply) => {
     const body = request.body as CreateLockRequest;
 
-    if (!body.message || !body.product || !body.feature || !body.author || !body.source) {
+    if (!body.message || !body.product || !body.author || !body.source) {
       return reply.status(400).send({
-        error: { code: 'VALIDATION_ERROR', message: 'message, product, feature, author, and source are required' },
+        error: { code: 'VALIDATION_ERROR', message: 'message, product, author, and source are required' },
       });
     }
 
@@ -116,9 +116,9 @@ export async function lockRoutes(fastify: FastifyInstance) {
   fastify.post('/pre-check', llmRateLimit, async (request, reply) => {
     const body = request.body as { message: string; product: string; feature: string; scope?: string };
 
-    if (!body.message || !body.product || !body.feature) {
+    if (!body.message || !body.product) {
       return reply.status(400).send({
-        error: { code: 'VALIDATION_ERROR', message: 'message, product, and feature are required' },
+        error: { code: 'VALIDATION_ERROR', message: 'message and product are required' },
       });
     }
 
@@ -127,7 +127,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
         request.workspaceId,
         body.message,
         body.product,
-        body.feature,
+        body.feature || 'main',
         body.scope ?? 'minor',
       );
       return { data: result };

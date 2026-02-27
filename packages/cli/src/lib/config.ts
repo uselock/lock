@@ -9,7 +9,7 @@ export function getConfig(): ProjectConfig | null {
   try {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
     const config = JSON.parse(raw) as ProjectConfig;
-    if (config.product && config.feature) {
+    if (config.product) {
       return config;
     }
     return null;

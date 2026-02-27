@@ -14,7 +14,7 @@ export const initCommand = new Command('init')
     let { product, feature } = opts as { product?: string; feature?: string };
 
     try {
-      // If both flags provided, use the original non-interactive flow
+      // If product provided (with or without feature), use non-interactive flow
       if (product && feature) {
         try {
           await apiGet('/api/v1/products');
@@ -24,6 +24,18 @@ export const initCommand = new Command('init')
 
         saveConfig({ product, feature });
         printSuccess(product, feature);
+        return;
+      }
+
+      if (product && !feature) {
+        try {
+          await apiGet('/api/v1/products');
+        } catch {
+          console.log(chalk.yellow('Warning: Could not reach the Lock API. Config will be saved locally anyway.'));
+        }
+
+        saveConfig({ product });
+        printSuccess(product);
         return;
       }
 
@@ -113,7 +125,7 @@ export const initCommand = new Command('init')
       }
 
       saveConfig({ product, feature });
-      printSuccess(product, feature);
+      printSuccess(product, feature!);
     } catch (err: any) {
       // Handle user cancellation (Ctrl+C in prompts)
       if (err.name === 'ExitPromptError') {
@@ -125,10 +137,10 @@ export const initCommand = new Command('init')
     }
   });
 
-function printSuccess(product: string, feature: string): void {
+function printSuccess(product: string, feature?: string): void {
   console.log(chalk.green('Initialized Lock in this directory.'));
   console.log(`  ${chalk.dim('Product:')} ${product}`);
-  console.log(`  ${chalk.dim('Feature:')} ${feature}`);
+  console.log(`  ${chalk.dim('Feature:')} ${feature || 'main (default)'}`);
   console.log('');
   console.log(chalk.dim('Config saved to .lock/config.json'));
 }

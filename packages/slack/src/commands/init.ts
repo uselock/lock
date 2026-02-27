@@ -5,7 +5,7 @@ import { formatError, formatSuccess } from '../lib/formatters.js';
  * Handle `@lock init`.
  *
  * Two modes:
- * 1. With flags (`--product x --feature y`): direct API call (backward compat)
+ * 1. With flags (`--product x` or `--product x --feature y`): direct API call
  * 2. Without flags: return a "Set Up Channel" button that opens a modal
  */
 export async function handleInit(
@@ -16,21 +16,24 @@ export async function handleInit(
 ): Promise<any[]> {
   const { product, feature } = command.flags;
 
-  // If both flags provided, use direct API call (backward compat)
-  if (product && feature) {
+  // If product flag provided, use direct API call
+  if (product) {
     try {
-      const response = await callApi('POST', '/api/v1/channel-configs', {
+      const body: Record<string, string> = {
         slack_channel_id: channelId,
         product,
-        feature,
-      });
+      };
+      if (feature) body.feature = feature;
+
+      const response = await callApi('POST', '/api/v1/channel-configs', body);
 
       if (response.error) {
         return formatError(response.error.code || 'INIT_FAILED', response.error.message);
       }
 
+      const featureLabel = feature || 'main';
       return formatSuccess(
-        `Channel linked to *${product}* / *${feature}*.\nAll locks in this channel will be scoped to this product and feature.`,
+        `Channel linked to *${product}* / *${featureLabel}*.\nAll locks in this channel will be scoped to this product and feature.`,
       );
     } catch (err: any) {
       return formatError('INIT_FAILED', err.message || 'Failed to initialize channel configuration.');

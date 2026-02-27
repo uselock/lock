@@ -14,6 +14,7 @@ import type {
   SearchLocksRequest,
   DecisionType,
 } from '../types.js';
+import { DEFAULT_FEATURE } from '../types.js';
 
 // Auto-create product/feature by slug (upsert)
 async function upsertProduct(workspaceId: string, slug: string) {
@@ -65,9 +66,9 @@ async function generateUniqueShortId(maxRetries = 3): Promise<string> {
 }
 
 export async function commitLock(workspaceId: string, req: CreateLockRequest) {
-  // Upsert product and feature
+  // Upsert product and feature (default to "main" if no feature specified)
   const product = await upsertProduct(workspaceId, req.product);
-  const feature = await upsertFeature(product.id, req.feature);
+  const feature = await upsertFeature(product.id, req.feature || DEFAULT_FEATURE);
   const shortId = await generateUniqueShortId();
 
   // Insert the lock

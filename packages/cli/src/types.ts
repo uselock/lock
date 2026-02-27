@@ -5,5 +5,5 @@ export interface Credentials {
 
 export interface ProjectConfig {
   product: string;
-  feature: string;
+  feature?: string;
 }

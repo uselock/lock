@@ -2,24 +2,27 @@ import type { FastifyInstance } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { channelConfigs, products, features } from '../db/schema.js';
+import { DEFAULT_FEATURE } from '../types.js';
 
 export async function channelConfigRoutes(fastify: FastifyInstance) {
   // Create channel → product+feature mapping
   fastify.post('/', async (request, reply) => {
-    const { slack_channel_id, product, feature } = request.body as {
+    const { slack_channel_id, product, feature: featureInput } = request.body as {
       slack_channel_id: string;
       product: string;
-      feature: string;
+      feature?: string;
     };
 
-    if (!slack_channel_id || !product || !feature) {
+    if (!slack_channel_id || !product) {
       return reply.status(400).send({
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'slack_channel_id, product, and feature are required',
+          message: 'slack_channel_id and product are required',
         },
       });
     }
+
+    const feature = featureInput || DEFAULT_FEATURE;
 
     // Find or create product
     let prod = await db.query.products.findFirst({

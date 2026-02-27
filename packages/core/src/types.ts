@@ -20,10 +20,12 @@ export interface LockLink {
   ref: string;
 }
 
+export const DEFAULT_FEATURE = 'main';
+
 export interface CreateLockRequest {
   message: string;
   product: string;
-  feature: string;
+  feature?: string;
   scope?: 'minor' | 'major' | 'architectural';
   tags?: string[];
   decision_type?: DecisionType;
