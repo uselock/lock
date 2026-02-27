@@ -4,11 +4,18 @@ import { apiGet } from '../lib/api-client.js';
 import type { Feature } from '../lib/types.js';
 
 export function registerListFeatures(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_list_features',
-    'List features, optionally filtered by product slug',
     {
-      product: z.string().optional().describe('Product slug to filter features by'),
+      description: 'List features, optionally filtered by product.',
+      inputSchema: {
+        product: z.string().optional().describe('Product slug to filter features by'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ product }) => {
       try {

@@ -14,10 +14,26 @@ import { registerCheck } from './tools/check.js';
 import { registerRecap } from './tools/recap.js';
 import { registerKnowledge } from './tools/knowledge.js';
 
-const server = new McpServer({
-  name: 'lock',
-  version: '0.1.0',
-});
+const server = new McpServer(
+  {
+    name: 'lock',
+    version: '0.1.0',
+    description: 'Lock — decision tracking for product teams. Records architectural choices, scope changes, and trade-offs so teams know why things were built a certain way.',
+  },
+  {
+    instructions: [
+      'Lock tracks product decisions — architectural choices, scope changes, trade-offs — so teams know why things were built a certain way.',
+      '',
+      'Workflow:',
+      '1. BEFORE building: Call lock_check with what you\'re about to do. Follow any BLOCKING decisions.',
+      '2. AFTER deciding: Call lock_commit when you choose between approaches, set a convention, or establish a constraint.',
+      '3. To understand the current state: Call lock_context for all active decisions.',
+      '',
+      'What counts as a decision: choosing between approaches, establishing conventions, setting constraints, changing or reversing a previous decision.',
+      'What is NOT a decision: bug fixes, refactors, routine implementation, variable naming.',
+    ].join('\n'),
+  },
+);
 
 // Register all tools
 registerListProducts(server);

@@ -3,10 +3,16 @@ import { apiGet } from '../lib/api-client.js';
 import type { Product } from '../lib/types.js';
 
 export function registerListProducts(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_list_products',
-    'List all products in the workspace with their decision counts',
-    {},
+    {
+      description: 'List all products in the workspace with decision counts.',
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
     async () => {
       try {
         const result = await apiGet<{ products: Product[] }>('/api/v1/products');

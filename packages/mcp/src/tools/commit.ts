@@ -4,26 +4,33 @@ import { apiPost } from '../lib/api-client.js';
 import type { CommitResponse } from '../lib/types.js';
 
 export function registerCommit(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_commit',
-    'Commit a new lock (decision). Records a product decision with full context and checks for conflicts.',
     {
-      message: z.string().describe('The decision statement to record'),
-      product: z.string().optional().describe('Product slug (e.g. "trading")'),
-      feature: z.string().optional().describe('Feature slug (e.g. "margin-rework")'),
-      scope: z
-        .enum(['minor', 'major', 'architectural'])
-        .optional()
-        .describe('Scope of the decision (default: minor)'),
-      tags: z.array(z.string()).optional().describe('Tags for categorizing the decision'),
-      decision_type: z
-        .enum(['product', 'technical', 'business', 'design', 'process'])
-        .optional()
-        .describe('Decision type (auto-inferred if not provided)'),
-      source: z
-        .string()
-        .optional()
-        .describe('Source reference (e.g. session ID, URL)'),
+      description: 'Record a product decision. Call this after choosing between approaches, setting a convention, or establishing a constraint that future code should follow.',
+      inputSchema: {
+        message: z.string().describe('The decision statement as a clear sentence — e.g. "Use WebSockets instead of polling for real-time updates"'),
+        product: z.string().optional().describe('Product slug (e.g. "trading")'),
+        feature: z.string().optional().describe('Feature slug (e.g. "margin-rework")'),
+        scope: z
+          .enum(['minor', 'major', 'architectural'])
+          .optional()
+          .describe('Impact level: "minor" (default) for local choices, "major" for cross-feature, "architectural" for system-wide constraints'),
+        tags: z.array(z.string()).optional().describe('Tags for categorizing the decision'),
+        decision_type: z
+          .enum(['product', 'technical', 'business', 'design', 'process'])
+          .optional()
+          .describe('Category (auto-inferred if omitted): product, technical, business, design, or process'),
+        source: z
+          .string()
+          .optional()
+          .describe('Source reference (e.g. session ID, URL)'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ message, product, feature, scope, tags, decision_type, source }) => {
       try {

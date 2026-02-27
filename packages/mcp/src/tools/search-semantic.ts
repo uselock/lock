@@ -4,13 +4,20 @@ import { apiPost } from '../lib/api-client.js';
 import type { Lock } from '../lib/types.js';
 
 export function registerSearchSemantic(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_search_semantic',
-    'Semantic search across locks using natural language query. Finds decisions similar in meaning to the query.',
     {
-      query: z.string().describe('Natural language search query'),
-      product: z.string().optional().describe('Product slug to scope the search to'),
-      feature: z.string().optional().describe('Feature slug to scope the search to'),
+      description: 'Search decisions by meaning. Use when you need to find decisions related to a concept rather than filtering by exact fields.',
+      inputSchema: {
+        query: z.string().describe('Natural language search query'),
+        product: z.string().optional().describe('Product slug to scope the search to'),
+        feature: z.string().optional().describe('Feature slug to scope the search to'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ query, product, feature }) => {
       try {

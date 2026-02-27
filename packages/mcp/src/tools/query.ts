@@ -4,26 +4,33 @@ import { apiGet } from '../lib/api-client.js';
 import type { Lock } from '../lib/types.js';
 
 export function registerQuery(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_query',
-    'Query and filter locks (decisions) by product, feature, tags, scope, status, and limit',
     {
-      product: z.string().optional().describe('Product slug to filter by'),
-      feature: z.string().optional().describe('Feature slug to filter by'),
-      tags: z.array(z.string()).optional().describe('Tags to filter by'),
-      scope: z
-        .enum(['minor', 'major', 'architectural'])
-        .optional()
-        .describe('Scope to filter by'),
-      decision_type: z
-        .enum(['product', 'technical', 'business', 'design', 'process'])
-        .optional()
-        .describe('Decision type to filter by'),
-      status: z
-        .enum(['active', 'superseded', 'reverted', 'proposed', 'auto'])
-        .optional()
-        .describe('Status to filter by'),
-      limit: z.number().optional().describe('Maximum number of results to return'),
+      description: 'Filter and list decisions by product, feature, scope, status, or tags.',
+      inputSchema: {
+        product: z.string().optional().describe('Product slug to filter by'),
+        feature: z.string().optional().describe('Feature slug to filter by'),
+        tags: z.array(z.string()).optional().describe('Tags to filter by'),
+        scope: z
+          .enum(['minor', 'major', 'architectural'])
+          .optional()
+          .describe('Scope to filter by'),
+        decision_type: z
+          .enum(['product', 'technical', 'business', 'design', 'process'])
+          .optional()
+          .describe('Decision type to filter by'),
+        status: z
+          .enum(['active', 'superseded', 'reverted', 'proposed', 'auto'])
+          .optional()
+          .describe('Status to filter by'),
+        limit: z.number().optional().describe('Maximum number of results to return'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ product, feature, tags, scope, decision_type, status, limit }) => {
       try {

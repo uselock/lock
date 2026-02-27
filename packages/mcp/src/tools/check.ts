@@ -68,21 +68,28 @@ function formatCheck(locks: Lock[], intent: string): string {
 }
 
 export function registerCheck(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_check',
-    'Search for existing decisions relevant to what you are about to build. Use before starting work to check for constraints.',
     {
-      intent: z
-        .string()
-        .describe('What you are about to build or change'),
-      product: z
-        .string()
-        .optional()
-        .describe('Product slug to scope the search to'),
-      feature: z
-        .string()
-        .optional()
-        .describe('Feature slug to scope the search to'),
+      description: 'Check for existing decisions that constrain what you\'re about to build. CALL THIS BEFORE implementing any feature, refactor, or architectural change.',
+      inputSchema: {
+        intent: z
+          .string()
+          .describe('Describe what you are about to build or change — e.g. "add real-time price updates to the trading dashboard"'),
+        product: z
+          .string()
+          .optional()
+          .describe('Product slug to scope the search to'),
+        feature: z
+          .string()
+          .optional()
+          .describe('Feature slug to scope the search to'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ intent, product, feature }) => {
       try {

@@ -65,13 +65,20 @@ function formatKnowledge(result: KnowledgeResult): string {
 }
 
 export function registerKnowledge(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_knowledge',
-    'Get synthesized knowledge about a product or feature — summary, principles, tensions, and trajectory derived from all recorded decisions.',
     {
-      product: z.string().describe('Product slug (required)'),
-      feature: z.string().optional().describe('Feature slug (optional — omit for product-level knowledge)'),
-      regenerate: z.boolean().optional().describe('Force full regeneration from all decisions (default: false)'),
+      description: 'Get synthesized knowledge about a product — principles, tensions, and trajectory derived from recorded decisions.',
+      inputSchema: {
+        product: z.string().describe('Product slug (required)'),
+        feature: z.string().optional().describe('Feature slug (optional — omit for product-level knowledge)'),
+        regenerate: z.boolean().optional().describe('Force full regeneration from all decisions (default: false)'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ product, feature, regenerate }) => {
       try {

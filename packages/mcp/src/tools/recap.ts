@@ -85,12 +85,19 @@ function formatRecap(recap: RecapResult, product?: string): string {
 }
 
 export function registerRecap(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_recap',
-    'Get a summary of recent decisions across the organization. Shows totals, breakdowns by scope and type, top contributors, and key decisions.',
     {
-      product: z.string().optional().describe('Product slug to filter by (omit for org-wide)'),
-      since: z.string().optional().describe('ISO date string — only include decisions after this date (default: 7 days ago)'),
+      description: 'Summarize recent decisions with scope/type breakdowns and key highlights.',
+      inputSchema: {
+        product: z.string().optional().describe('Product slug to filter by (omit for org-wide)'),
+        since: z.string().optional().describe('ISO date string — only include decisions after this date (default: 7 days ago)'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ product, since }) => {
       try {

@@ -109,12 +109,19 @@ function formatContext(locks: Lock[], product?: string): string {
 }
 
 export function registerContext(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_context',
-    'Returns all active decisions for a product as formatted text. Use this to understand what decisions have been made before building.',
     {
-      product: z.string().optional().describe('Product slug to filter by'),
-      feature: z.string().optional().describe('Feature slug to filter by'),
+      description: 'Get all active decisions for a product. Use this to understand the full decision landscape before making changes.',
+      inputSchema: {
+        product: z.string().optional().describe('Product slug to filter by'),
+        feature: z.string().optional().describe('Feature slug to filter by'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ product, feature }) => {
       try {

@@ -4,11 +4,18 @@ import { apiGet } from '../lib/api-client.js';
 import type { Lock } from '../lib/types.js';
 
 export function registerGet(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_get',
-    'Get a single lock (decision) by its short ID or UUID',
     {
-      lock_id: z.string().describe('The short ID (e.g. "l-a7f3e2") or UUID of the lock'),
+      description: 'Get a single decision by its short ID (e.g. l-a7f3e2) or UUID.',
+      inputSchema: {
+        lock_id: z.string().describe('The short ID (e.g. "l-a7f3e2") or UUID of the lock'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ lock_id }) => {
       try {

@@ -2,6 +2,12 @@
 
 The Lock MCP server gives AI agents (Claude Code, Cursor, Windsurf, etc.) direct access to your team's product decisions. Agents can read existing decisions before writing code and record new decisions as they work.
 
+The server includes built-in `instructions` that teach agents the workflow automatically — no CLAUDE.md or per-editor config needed. When an agent connects, it learns to:
+
+1. **Call `lock_check` before building** — checks for constraints that apply to the planned work
+2. **Call `lock_commit` after deciding** — records choices between approaches, conventions, or constraints
+3. **Call `lock_context` for orientation** — gets all active decisions for a product
+
 ## Why Give AI Agents Access to Decisions?
 
 Without Lock, AI agents write code in a vacuum. They don't know that your team decided to "use notional value instead of margin" or that "all public APIs must use pagination." With Lock's MCP server, agents can:
@@ -66,7 +72,7 @@ Add to your Cursor MCP settings:
 
 #### `lock_list_products`
 
-List all products in the workspace with their decision counts.
+List all products in the workspace with decision counts.
 
 **Parameters:** None
 
@@ -116,7 +122,7 @@ List features, optionally filtered by product.
 
 #### `lock_query`
 
-Query and filter decisions with multiple criteria.
+Filter and list decisions by product, feature, scope, status, or tags.
 
 **Parameters:**
 
@@ -151,7 +157,7 @@ Query and filter decisions with multiple criteria.
 
 #### `lock_get`
 
-Get full details of a single decision by its short ID or UUID.
+Get a single decision by its short ID (e.g. `l-a7f3e2`) or UUID.
 
 **Parameters:**
 
@@ -165,7 +171,7 @@ Get full details of a single decision by its short ID or UUID.
 
 #### `lock_get_lineage`
 
-Get the full supersession and revert history chain of a decision.
+Get the supersession and revert history of a decision.
 
 **Parameters:**
 
@@ -199,7 +205,7 @@ Get the full supersession and revert history chain of a decision.
 
 #### `lock_search_semantic`
 
-Semantic search across decisions using natural language. Finds decisions similar in meaning to the query, even if the exact words don't match.
+Search decisions by meaning. Use when you need to find decisions related to a concept rather than filtering by exact fields.
 
 **Parameters:**
 
@@ -217,16 +223,17 @@ Semantic search across decisions using natural language. Finds decisions similar
 
 #### `lock_commit`
 
-Record a new product decision. Automatically checks for conflicts with existing decisions and detects supersessions.
+Record a product decision. Call this after choosing between approaches, setting a convention, or establishing a constraint that future code should follow.
 
 **Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `message` | string | Yes | The decision statement |
+| `message` | string | Yes | The decision statement as a clear sentence — e.g. "Use WebSockets instead of polling for real-time updates" |
 | `product` | string | No | Product slug |
 | `feature` | string | No | Feature slug |
-| `scope` | string | No | `minor`, `major`, or `architectural` (default: `minor`) |
+| `scope` | string | No | Impact level: `minor` (default) for local choices, `major` for cross-feature, `architectural` for system-wide constraints |
+| `decision_type` | string | No | Category (auto-inferred if omitted): `product`, `technical`, `business`, `design`, or `process` |
 | `tags` | string[] | No | Tags for categorization |
 | `source` | string | No | Source reference (e.g., session ID) |
 
@@ -260,28 +267,94 @@ All decisions committed via MCP are authored as `MCP Agent` with source type `ag
 
 ---
 
+### Context Tools
+
+These tools return formatted Markdown optimized for agent consumption.
+
+#### `lock_context`
+
+Get all active decisions for a product. Use this to understand the full decision landscape before making changes.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `product` | string | No | Product slug to filter by |
+| `feature` | string | No | Feature slug to filter by |
+
+**Returns:** Markdown with architectural constraints highlighted, decisions grouped by feature, and knowledge summary (if available).
+
+---
+
+#### `lock_check`
+
+Check for existing decisions that constrain what you're about to build. CALL THIS BEFORE implementing any feature, refactor, or architectural change.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `intent` | string | Yes | Describe what you are about to build or change — e.g. "add real-time price updates to the trading dashboard" |
+| `product` | string | No | Product slug to scope the search to |
+| `feature` | string | No | Feature slug to scope the search to |
+
+**Returns:** Markdown with BLOCKING decisions (architectural/major) and informational decisions (minor).
+
+---
+
+#### `lock_recap`
+
+Summarize recent decisions with scope/type breakdowns and key highlights.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `product` | string | No | Product slug to filter by (omit for org-wide) |
+| `since` | string | No | ISO date string — only include decisions after this date (default: 7 days ago) |
+
+**Returns:** Markdown summary with totals, scope/type breakdown, top contributors, and key decisions.
+
+---
+
+#### `lock_knowledge`
+
+Get synthesized knowledge about a product — principles, tensions, and trajectory derived from recorded decisions.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `product` | string | Yes | Product slug |
+| `feature` | string | No | Feature slug (omit for product-level knowledge) |
+| `regenerate` | boolean | No | Force full regeneration from all decisions (default: false) |
+
+**Returns:** Markdown with summary, principles, tensions & open questions, and trajectory.
+
+---
+
 ## Usage Patterns
 
-### Before Starting Work
+With the built-in server instructions, agents should call `lock_check` and `lock_commit` automatically. You can also prompt them explicitly:
 
-Have the agent check for existing constraints:
+### Before Starting Work
 
 ```
 "Before implementing the caching layer, check Lock for any existing
 decisions about caching, performance, or infrastructure."
 ```
 
-The agent will use `lock_search_semantic` or `lock_query` to find relevant decisions and factor them into the implementation.
+The agent will call `lock_check` to find relevant constraints and factor them into the implementation.
 
 ### During Implementation
 
-When the agent makes a significant design choice, have it record the decision:
+When the agent makes a significant design choice:
 
 ```
 "Record the decision to use Redis with a 15-minute TTL for session caching."
 ```
 
-The agent will use `lock_commit` to record the decision, and Lock will automatically check for conflicts.
+The agent will call `lock_commit` to record the decision. Lock automatically checks for conflicts and supersessions.
 
 ### Getting Context for a Product
 
@@ -289,4 +362,4 @@ The agent will use `lock_commit` to record the decision, and Lock will automatic
 "What are the active architectural decisions for the trading product?"
 ```
 
-The agent will use `lock_query` with `product: "trading"` and `scope: "architectural"` to retrieve high-level decisions.
+The agent will call `lock_context` with `product: "trading"` to get all active decisions, or `lock_query` with `scope: "architectural"` for just the high-level ones.

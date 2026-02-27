@@ -4,11 +4,18 @@ import { apiGet } from '../lib/api-client.js';
 import type { Lock } from '../lib/types.js';
 
 export function registerGetLineage(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'lock_get_lineage',
-    'Get the full lineage chain (supersession/revert history) of a lock',
     {
-      lock_id: z.string().describe('The short ID (e.g. "l-a7f3e2") or UUID of the lock'),
+      description: 'Get the supersession and revert history of a decision.',
+      inputSchema: {
+        lock_id: z.string().describe('The short ID (e.g. "l-a7f3e2") or UUID of the lock'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async ({ lock_id }) => {
       try {
