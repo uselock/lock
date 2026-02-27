@@ -1,11 +1,29 @@
 {
   "name": "@uselock/cli",
   "version": "0.1.0",
-  "private": true,
+  "description": "CLI for Lock — track product decisions where they happen",
   "license": "MIT",
   "type": "module",
   "bin": {
     "lock": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "lock",
+    "decisions",
+    "cli",
+    "product-management"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GuitareCiel/lock.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/GuitareCiel/lock/tree/main/packages/cli",
+  "engines": {
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

@@ -1,11 +1,30 @@
 {
   "name": "@uselock/mcp",
   "version": "0.1.0",
-  "private": true,
+  "description": "MCP server for Lock — give AI agents access to product decisions",
   "license": "MIT",
   "type": "module",
   "bin": {
     "lock-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "lock",
+    "mcp",
+    "decisions",
+    "ai-agents",
+    "model-context-protocol"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GuitareCiel/lock.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/GuitareCiel/lock/tree/main/packages/mcp",
+  "engines": {
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

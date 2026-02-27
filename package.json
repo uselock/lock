@@ -7,9 +7,9 @@
   "author": "Lock Contributors",
   "repository": {
     "type": "git",
-    "url": "https://github.com/uselock/lock.git"
+    "url": "https://github.com/GuitareCiel/lock.git"
   },
-  "homepage": "https://github.com/uselock/lock",
+  "homepage": "https://github.com/GuitareCiel/lock",
   "scripts": {
     "dev": "concurrently \"pnpm --filter @uselock/core dev\" \"pnpm --filter @uselock/slack dev\"",
     "dev:core": "pnpm --filter @uselock/core dev",
