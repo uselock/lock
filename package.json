@@ -2,7 +2,14 @@
   "name": "lock",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "The decision protocol for product teams",
+  "author": "Lock Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uselock/lock.git"
+  },
+  "homepage": "https://github.com/uselock/lock",
   "scripts": {
     "dev": "concurrently \"pnpm --filter @uselock/core dev\" \"pnpm --filter @uselock/slack dev\"",
     "dev:core": "pnpm --filter @uselock/core dev",

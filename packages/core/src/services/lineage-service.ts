@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { locks } from '../db/schema.js';
 
@@ -11,7 +11,7 @@ interface LineageNode {
   relationship: 'supersedes' | 'superseded_by' | 'reverted_by' | 'root';
 }
 
-export async function getLineage(lockId: string): Promise<LineageNode[]> {
+export async function getLineage(workspaceId: string, lockId: string): Promise<LineageNode[]> {
   const chain: LineageNode[] = [];
   const visited = new Set<string>();
 
@@ -20,7 +20,7 @@ export async function getLineage(lockId: string): Promise<LineageNode[]> {
   while (currentId && !visited.has(currentId)) {
     visited.add(currentId);
     const lock: typeof locks.$inferSelect | undefined = await db.query.locks.findFirst({
-      where: eq(locks.id, currentId),
+      where: and(eq(locks.workspaceId, workspaceId), eq(locks.id, currentId)),
     });
     if (!lock) break;
 
@@ -38,14 +38,14 @@ export async function getLineage(lockId: string): Promise<LineageNode[]> {
 
   // Walk forwards through supersession chain
   const rootLock = await db.query.locks.findFirst({
-    where: eq(locks.id, lockId),
+    where: and(eq(locks.workspaceId, workspaceId), eq(locks.id, lockId)),
   });
   if (rootLock) {
     let forwardId: string | null = rootLock.supersededById;
     while (forwardId && !visited.has(forwardId)) {
       visited.add(forwardId);
       const lock = await db.query.locks.findFirst({
-        where: eq(locks.id, forwardId),
+        where: and(eq(locks.workspaceId, workspaceId), eq(locks.id, forwardId)),
       });
       if (!lock) break;
 
@@ -64,7 +64,7 @@ export async function getLineage(lockId: string): Promise<LineageNode[]> {
     // Add revert info if present
     if (rootLock.revertedById && !visited.has(rootLock.revertedById)) {
       const revertLock = await db.query.locks.findFirst({
-        where: eq(locks.id, rootLock.revertedById),
+        where: and(eq(locks.workspaceId, workspaceId), eq(locks.id, rootLock.revertedById)),
       });
       if (revertLock) {
         chain.push({

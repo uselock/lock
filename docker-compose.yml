@@ -3,16 +3,16 @@ services:
     image: pgvector/pgvector:pg16
     container_name: lock-db
     environment:
-      POSTGRES_USER: lock
-      POSTGRES_PASSWORD: lock
-      POSTGRES_DB: lock
+      POSTGRES_USER: ${POSTGRES_USER:-lock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}
+      POSTGRES_DB: ${POSTGRES_DB:-lock}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - lock_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lock"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lock}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,10 +26,10 @@ services:
     ports:
       - "${API_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://lock:lock@postgres:5432/lock
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lock}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}@postgres:5432/${POSTGRES_DB:-lock}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: lock
+      DB_USER: ${POSTGRES_USER:-lock}
       API_PORT: 3000
       NODE_ENV: ${NODE_ENV:-production}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -37,7 +37,8 @@ services:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-lock-internal-secret}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?INTERNAL_SECRET env var is required}
+      LOCK_TELEMETRY: ${LOCK_TELEMETRY:-false}
       LOCK_API_URL: http://localhost:3000
     restart: unless-stopped
 

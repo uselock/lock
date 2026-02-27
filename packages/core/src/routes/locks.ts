@@ -50,8 +50,10 @@ export async function lockRoutes(fastify: FastifyInstance) {
     return { data: result };
   });
 
+  const llmRateLimit = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+
   // Extract a decision from thread context (LLM-powered)
-  fastify.post('/extract', async (request, reply) => {
+  fastify.post('/extract', llmRateLimit, async (request, reply) => {
     const body = request.body as ExtractRequest;
 
     if (!body.thread_context) {
@@ -72,7 +74,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
   });
 
   // Search locks
-  fastify.post('/search', async (request) => {
+  fastify.post('/search', llmRateLimit, async (request) => {
     const body = request.body as SearchLocksRequest;
     const result = await searchLocks(request.workspaceId, body);
     return { data: result };
@@ -90,7 +92,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
   });
 
   // Batch extraction from message history
-  fastify.post('/extract-batch', async (request, reply) => {
+  fastify.post('/extract-batch', llmRateLimit, async (request, reply) => {
     const body = request.body as { messages: { text: string; author: string; timestamp: string }[]; product?: string; feature?: string };
 
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -111,7 +113,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
   });
 
   // Pre-check for conflicts before committing
-  fastify.post('/pre-check', async (request, reply) => {
+  fastify.post('/pre-check', llmRateLimit, async (request, reply) => {
     const body = request.body as { message: string; product: string; feature: string; scope?: string };
 
     if (!body.message || !body.product || !body.feature) {
@@ -140,7 +142,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
   // Get a single lock
   fastify.get('/:shortId', async (request, reply) => {
     const { shortId } = request.params as { shortId: string };
-    const lock = await getLock(shortId);
+    const lock = await getLock(request.workspaceId, shortId);
     if (!lock) {
       return reply.status(404).send({
         error: { code: 'LOCK_NOT_FOUND', message: `Lock "${shortId}" not found` },
@@ -167,7 +169,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const result = await updateLockMetadata(shortId, {
+      const result = await updateLockMetadata(request.workspaceId, shortId, {
         scope: body.scope as any,
         tags: body.tags,
         decision_type: body.decision_type as any,
@@ -188,13 +190,13 @@ export async function lockRoutes(fastify: FastifyInstance) {
   // Get lock lineage
   fastify.get('/:shortId/lineage', async (request, reply) => {
     const { shortId } = request.params as { shortId: string };
-    const lock = await getLock(shortId);
+    const lock = await getLock(request.workspaceId, shortId);
     if (!lock) {
       return reply.status(404).send({
         error: { code: 'LOCK_NOT_FOUND', message: `Lock "${shortId}" not found` },
       });
     }
-    const chain = await getLineage(lock.id);
+    const chain = await getLineage(request.workspaceId, lock.id);
     return { data: { chain } };
   });
 
@@ -235,7 +237,7 @@ export async function lockRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const result = await addLink(shortId, body);
+    const result = await addLink(request.workspaceId, shortId, body);
     if (!result) {
       return reply.status(404).send({
         error: { code: 'LOCK_NOT_FOUND', message: `Lock "${shortId}" not found` },

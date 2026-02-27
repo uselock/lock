@@ -45,7 +45,7 @@ The fastest way to run Lock. Requires Docker.
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> lock
+git clone https://github.com/uselock/lock.git
 cd lock
 cp .env.example .env
 ```
@@ -76,7 +76,14 @@ This starts PostgreSQL (with pgvector), applies the database schema, and runs th
 
 ### 3. Create an API key
 
-Open `http://localhost:3000` in your browser to access the admin UI. Create a workspace and generate an API key.
+Use the CLI to authenticate:
+
+```bash
+pnpm --filter @uselock/cli build
+node packages/cli/dist/index.js login --url http://localhost:3000
+```
+
+Or insert an API key directly into the database — see the [self-hosting guide](docs/self-hosting.md) for details.
 
 ### 4. Verify
 
@@ -101,7 +108,7 @@ Optional:
 ### 1. Clone and install
 
 ```bash
-git clone <repo-url> lock
+git clone https://github.com/uselock/lock.git
 cd lock
 pnpm install
 ```
@@ -413,6 +420,24 @@ lock/
 ├── .env.example             # Environment template
 └── CLAUDE.md                # Full architecture spec
 ```
+
+## Telemetry
+
+Lock includes **opt-in** anonymous telemetry to help us understand adoption. It is **disabled by default**.
+
+To enable, set `LOCK_TELEMETRY=true` in your environment. Once enabled, the core API sends a single anonymous heartbeat every 24 hours with aggregate stats: number of workspaces, lock count bracket, which surfaces are active, and whether LLM keys are configured. No decision content, user names, or API keys are ever sent.
+
+To disable (or if you never enabled it), no data is sent — there is nothing to turn off.
+
+See the full implementation: [`packages/core/src/services/telemetry-service.ts`](packages/core/src/services/telemetry-service.ts)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+## License
+
+[MIT](LICENSE)
 
 ## Stopping services
 

@@ -47,6 +47,10 @@ RUN chmod +x /docker-entrypoint.sh
 # Install pg_isready for health check wait loop + bash for entrypoint
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client bash && rm -rf /var/lib/apt/lists/*
 
+# Run as non-root user
+RUN addgroup --system lock && adduser --system --ingroup lock lock
+USER lock
+
 EXPOSE 3000
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

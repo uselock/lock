@@ -4,6 +4,17 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db/client.js';
 import { apiKeys, workspaces } from '../db/schema.js';
 
+function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against self to keep constant time, then return false
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     workspaceId: string;
@@ -16,7 +27,8 @@ export async function authMiddleware(
 ): Promise<void> {
   // Internal service-to-service auth
   const internalSecret = request.headers['x-internal-secret'] as string | undefined;
-  if (internalSecret && internalSecret === process.env.INTERNAL_SECRET) {
+  const expectedSecret = process.env.INTERNAL_SECRET;
+  if (internalSecret && expectedSecret && timingSafeCompare(internalSecret, expectedSecret)) {
     // Resolve workspace from Slack team ID header
     const teamId = request.headers['x-workspace-team-id'] as string | undefined;
     if (teamId) {

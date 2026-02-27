@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { products, locks } from '../db/schema.js';
 
@@ -46,7 +46,7 @@ export async function productRoutes(fastify: FastifyInstance) {
     }
 
     const existing = await db.query.products.findFirst({
-      where: eq(products.slug, slug),
+      where: and(eq(products.workspaceId, request.workspaceId), eq(products.slug, slug)),
     });
     if (existing) {
       return reply.status(409).send({
@@ -75,7 +75,7 @@ export async function productRoutes(fastify: FastifyInstance) {
     const { description, name } = request.body as { description?: string; name?: string };
 
     const product = await db.query.products.findFirst({
-      where: eq(products.slug, slug),
+      where: and(eq(products.workspaceId, request.workspaceId), eq(products.slug, slug)),
     });
     if (!product) {
       return reply.status(404).send({

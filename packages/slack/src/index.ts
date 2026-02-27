@@ -22,6 +22,7 @@ import { registerAddLink } from './actions/add-link.js';
 import { registerAddTags } from './actions/add-tags.js';
 import { registerImportCommit } from './actions/import-commit.js';
 import { registerForceCommit } from './actions/force-commit.js';
+import { registerInitChannel } from './actions/init-channel.js';
 import { startDigestScheduler } from './services/digest-scheduler.js';
 
 const LOCK_API_URL = process.env.LOCK_API_URL || 'http://localhost:3000';
@@ -112,7 +113,7 @@ app.event('app_mention', async ({ event, client, say }) => {
   try {
     switch (command.subcommand) {
       case 'init':
-        blocks = await handleInit(command, channelId, teamCallApi);
+        blocks = await handleInit(command, channelId, teamId, teamCallApi);
         break;
 
       case 'commit':
@@ -267,6 +268,7 @@ registerAddLink(app, callApi);
 registerAddTags(app, callApi);
 registerImportCommit(app, callApi);
 registerForceCommit(app, callApi);
+registerInitChannel(app, callApi);
 
 // Start the app
 (async () => {

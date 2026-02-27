@@ -40,7 +40,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
   });
 
   // Force full regeneration
-  fastify.post('/regenerate', async (request, reply) => {
+  fastify.post('/regenerate', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const body = request.body as { product?: string; feature?: string };
 
     if (!body.product) {

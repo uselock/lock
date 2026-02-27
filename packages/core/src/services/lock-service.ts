@@ -276,9 +276,9 @@ export async function listLocks(workspaceId: string, query: ListLocksQuery) {
   return { locks: enriched, total: enriched.length };
 }
 
-export async function getLock(shortId: string) {
+export async function getLock(workspaceId: string, shortId: string) {
   const lock = await db.query.locks.findFirst({
-    where: eq(locks.shortId, shortId),
+    where: and(eq(locks.workspaceId, workspaceId), eq(locks.shortId, shortId)),
   });
   if (!lock) return null;
 
@@ -330,7 +330,7 @@ export async function revertLock(
   req: RevertLockRequest
 ) {
   const original = await db.query.locks.findFirst({
-    where: eq(locks.shortId, shortId),
+    where: and(eq(locks.workspaceId, workspaceId), eq(locks.shortId, shortId)),
   });
   if (!original) return null;
   if (original.status !== 'active') {
@@ -398,9 +398,9 @@ export async function revertLock(
   };
 }
 
-export async function addLink(shortId: string, req: AddLinkRequest) {
+export async function addLink(workspaceId: string, shortId: string, req: AddLinkRequest) {
   const lock = await db.query.locks.findFirst({
-    where: eq(locks.shortId, shortId),
+    where: and(eq(locks.workspaceId, workspaceId), eq(locks.shortId, shortId)),
   });
   if (!lock) return null;
 
@@ -417,11 +417,12 @@ export async function addLink(shortId: string, req: AddLinkRequest) {
 }
 
 export async function updateLockMetadata(
+  workspaceId: string,
   shortId: string,
   updates: { scope?: 'minor' | 'major' | 'architectural'; tags?: string[]; decision_type?: DecisionType },
 ) {
   const lock = await db.query.locks.findFirst({
-    where: eq(locks.shortId, shortId),
+    where: and(eq(locks.workspaceId, workspaceId), eq(locks.shortId, shortId)),
   });
   if (!lock) return null;
   if (lock.status !== 'active') {
@@ -529,10 +530,11 @@ export async function searchLocks(workspaceId: string, req: SearchLocksRequest) 
   }
 
   // Fallback: text search with ILIKE
+  const escapedQuery = req.query.replace(/[%_\\]/g, '\\$&');
   const rows = await db
     .select()
     .from(locks)
-    .where(and(...conditions, ilike(locks.message, `%${req.query}%`)))
+    .where(and(...conditions, ilike(locks.message, `%${escapedQuery}%`)))
     .orderBy(desc(locks.createdAt))
     .limit(10);
 
