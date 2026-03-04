@@ -12,10 +12,22 @@ export const whoamiCommand = new Command('whoami')
     }
 
     const creds = await getCredentials();
-    const prefix = creds.api_key.slice(0, 8);
 
+    if (creds.name || creds.email) {
+      console.log(`  ${chalk.dim('Account:')} ${creds.name ?? creds.email}`);
+      if (creds.name && creds.email) {
+        console.log(`  ${chalk.dim('Email:')}   ${creds.email}`);
+      }
+    }
     console.log(`  ${chalk.dim('API URL:')} ${creds.api_url}`);
-    console.log(`  ${chalk.dim('Key:')}     ${prefix}...`);
+    if (creds.api_key) {
+      console.log(`  ${chalk.dim('Key:')}     ${creds.api_key.slice(0, 8)}...`);
+    } else if (creds.access_token) {
+      console.log(`  ${chalk.dim('Auth:')}    browser login`);
+    }
+    if (creds.workspace_id) {
+      console.log(`  ${chalk.dim('Workspace:')} ${creds.workspace_id}`);
+    }
 
     // Check connection status
     try {

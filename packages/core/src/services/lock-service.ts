@@ -6,6 +6,7 @@ import { detectConflicts } from './conflict-service.js';
 import { notifySlack } from './notify-service.js';
 import { updateKnowledgeIncremental } from './knowledge-service.js';
 import { inferDecisionType } from '../lib/llm.js';
+import { runBeforeCommitHooks, runAfterCommitHooks } from '../lib/hooks.js';
 import type {
   CreateLockRequest,
   RevertLockRequest,
@@ -66,6 +67,17 @@ async function generateUniqueShortId(maxRetries = 3): Promise<string> {
 }
 
 export async function commitLock(workspaceId: string, req: CreateLockRequest) {
+  // Run before:commit hooks (e.g., usage limit checks in SaaS mode)
+  await runBeforeCommitHooks({
+    workspaceId,
+    message: req.message,
+    productSlug: req.product,
+    featureSlug: req.feature || DEFAULT_FEATURE,
+    scope: req.scope ?? 'minor',
+    authorType: req.author.type,
+    authorSource: req.author.source,
+  });
+
   // Upsert product and feature (default to "main" if no feature specified)
   const product = await upsertProduct(workspaceId, req.product);
   const feature = await upsertFeature(product.id, req.feature || DEFAULT_FEATURE);
@@ -146,6 +158,18 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
         .where(eq(locks.id, lock.id));
     }
   }
+
+  // Run after:commit hooks (e.g., usage increment in SaaS mode)
+  runAfterCommitHooks({
+    workspaceId,
+    lockId: lock.id,
+    message: req.message,
+    productSlug: req.product,
+    featureSlug: req.feature || DEFAULT_FEATURE,
+    scope: req.scope ?? 'minor',
+    authorType: req.author.type,
+    authorSource: req.author.source,
+  }).catch(() => {});
 
   // Notify Slack if lock didn't come from Slack
   if (req.source.type !== 'slack') {

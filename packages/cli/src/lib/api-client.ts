@@ -1,4 +1,5 @@
-import { getCredentials } from './credentials.js';
+import { getCredentials, saveCredentials } from './credentials.js';
+import type { Credentials } from '../types.js';
 
 class ApiError extends Error {
   public status: number;
@@ -12,20 +13,71 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const creds = await getCredentials();
-  const url = `${creds.api_url}${path}`;
-
+function buildHeaders(creds: Credentials): Record<string, string> {
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${creds.api_key}`,
     'Content-Type': 'application/json',
   };
 
-  const res = await fetch(url, {
+  if (creds.access_token) {
+    headers['Authorization'] = `Bearer ${creds.access_token}`;
+  } else if (creds.api_key) {
+    headers['Authorization'] = `Bearer ${creds.api_key}`;
+  }
+
+  if (creds.workspace_id) {
+    headers['X-Workspace-Id'] = creds.workspace_id;
+  }
+
+  return headers;
+}
+
+async function refreshTokens(creds: Credentials): Promise<Credentials | null> {
+  if (!creds.refresh_token) return null;
+
+  try {
+    const res = await fetch(`${creds.api_url}/auth/cli/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: creds.refresh_token }),
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json() as { access_token: string; refresh_token: string };
+    const updated: Credentials = {
+      ...creds,
+      access_token: json.access_token,
+      refresh_token: json.refresh_token,
+    };
+    await saveCredentials(updated);
+    return updated;
+  } catch {
+    return null;
+  }
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let creds = await getCredentials();
+  const url = `${creds.api_url}${path}`;
+
+  let res = await fetch(url, {
     method,
-    headers,
+    headers: buildHeaders(creds),
     body: body != null ? JSON.stringify(body) : undefined,
   });
+
+  // Auto-refresh on 401 if we have a refresh token (one retry only)
+  if (res.status === 401 && creds.refresh_token) {
+    const refreshed = await refreshTokens(creds);
+    if (refreshed) {
+      creds = refreshed;
+      res = await fetch(url, {
+        method,
+        headers: buildHeaders(creds),
+        body: body != null ? JSON.stringify(body) : undefined,
+      });
+    }
+  }
 
   const json = await res.json() as { data?: T; error?: { code: string; message: string } };
 

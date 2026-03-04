@@ -80,7 +80,7 @@ async function run(): Promise<void> {
     }
 
     lines.push('');
-    lines.push('_Posted by [Lock](https://github.com/uselock/lock) — the decision protocol for product teams_');
+    lines.push('_Posted by [Lock](https://github.com/GuitareCiel/lock) — the decision protocol for product teams_');
 
     const commentBody = lines.join('\n');
 

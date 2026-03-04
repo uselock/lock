@@ -10,6 +10,50 @@ Lock solves this with a simple `@lock` command that snapshots a decision with fu
 
 ---
 
+## ⚠️ Repo Structure: Open-Source Core + Private SaaS
+
+**This is a private monorepo.** It contains both the open-source project and the hosted SaaS layer. The public open-source repo lives at [github.com/uselock/lock](https://github.com/uselock/lock). A sync script copies only the open-source parts there.
+
+### The boundary
+
+| Package | Visibility | Purpose |
+|---------|-----------|---------|
+| `packages/core/` | **Public** (open-source) | Core API engine, all decision logic |
+| `packages/cli/` | **Public** (minus `signup.ts`, `device-flow.ts`) | CLI client |
+| `packages/mcp/` | **Public** | MCP server for AI agents |
+| `packages/slack/` | **Public** | Slack bot surface |
+| `packages/saas/` | **Private** | Auth, billing, user management, usage limits |
+| `packages/web/` | **Private** | Next.js web dashboard |
+| `.github/` | **Private** | CI/CD workflows |
+
+### Rules — READ BEFORE MAKING CHANGES
+
+1. **Core must NEVER import from SaaS.** No imports of `@uselock/saas`, no relative imports reaching into `packages/saas/`. The dependency flows one way: `saas → core`, never `core → saas`.
+
+2. **SaaS extends core via hooks and plugins, not by editing core.** Core exposes:
+   - `buildApp(options)` — Fastify factory that SaaS extends with plugins, routes, CORS
+   - `registerAuthStrategy(fn)` — SaaS registers session/JWT auth
+   - `onBeforeCommit(fn)` / `onAfterCommit(fn)` — SaaS registers usage limit checks
+   - If you need core to do something new for SaaS, add a hook or extension point — don't add SaaS logic directly.
+
+3. **These dependencies belong in `packages/saas/`, NOT core:** `bcryptjs`, `jose`, `stripe`, `@fastify/cookie`. If you find yourself adding auth, billing, or user management deps to core, stop — it goes in saas.
+
+4. **These DB tables are SaaS-only** (defined in `packages/saas/src/db/schema.ts`): `users`, `sessions`, `workspaceMembers`, `workspaceInvites`, `subscriptions`. Don't add them to `packages/core/src/db/schema.ts`.
+
+5. **CLI has conditional SaaS features.** `signup.ts` and `device-flow.ts` are loaded via dynamic `import()` with try/catch. In the open-source build, they're simply absent and the CLI gracefully falls back to API-key-only auth.
+
+6. **Don't put secrets or SaaS-specific env vars in open-source config files.** Check `.env.example` and `docker-compose.yml` — only include what self-hosters need.
+
+### Syncing to public repo
+
+```bash
+bash scripts/sync-public.sh /path/to/lock-public
+```
+
+The script uses rsync to copy open-source files, excludes private packages, and verifies no SaaS imports leaked into core. Run it before pushing to the public repo.
+
+---
+
 ## Architecture Overview
 
 Lock is a **multi-surface protocol** with one core engine and multiple input/output surfaces:

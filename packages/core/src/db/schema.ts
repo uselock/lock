@@ -30,7 +30,10 @@ const vector = customType<{ data: number[]; driverParam: string }>({
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),
   slackTeamId: text('slack_team_id').unique(),
+  slug: text('slug').unique(),
   name: text('name').notNull(),
+  plan: text('plan').notNull().default('free'),
+  createdBy: uuid('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
@@ -93,6 +96,7 @@ export const locks = pgTable(
     authorId: text('author_id').notNull(),
     authorName: text('author_name').notNull(),
     authorSource: text('author_source').notNull(), // 'slack' | 'cli' | 'mcp' | 'api'
+    authorUserId: uuid('author_user_id'), // nullable — populated by SaaS
 
     // Classification
     scope: text('scope').notNull().default('minor'), // 'minor' | 'major' | 'architectural'
@@ -163,6 +167,7 @@ export const apiKeys = pgTable('api_keys', {
   keyPrefix: text('key_prefix').notNull(),
   name: text('name').notNull(),
   scopes: text('scopes').array().default(['read', 'write']),
+  createdBy: uuid('created_by'), // nullable — populated by SaaS
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 });

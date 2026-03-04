@@ -12,7 +12,7 @@ export async function getCredentials(): Promise<Credentials> {
   try {
     const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
     const creds = JSON.parse(raw) as Credentials;
-    if (creds.api_url && creds.api_key) {
+    if (creds.api_url && (creds.api_key || creds.access_token)) {
       return creds;
     }
   } catch {
@@ -23,7 +23,7 @@ export async function getCredentials(): Promise<Credentials> {
 
   const api_url = await input({
     message: 'Lock API URL:',
-    default: 'http://localhost:3000',
+    default: 'https://api.uselock.dev',
   });
 
   const api_key = await password({
@@ -42,7 +42,7 @@ export function credentialsExist(): boolean {
   try {
     const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
     const creds = JSON.parse(raw);
-    return Boolean(creds.api_url && creds.api_key);
+    return Boolean(creds.api_url && (creds.api_key || creds.access_token));
   } catch {
     return false;
   }

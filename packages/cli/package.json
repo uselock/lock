@@ -1,6 +1,6 @@
 {
   "name": "@uselock/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI for Lock — track product decisions where they happen",
   "license": "MIT",
   "type": "module",
@@ -32,13 +32,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "commander": "^12.1.0",
+    "@inquirer/prompts": "^7.3.2",
+    "@uselock/mcp": "^0.1.1",
     "chalk": "^5.4.1",
-    "@inquirer/prompts": "^7.3.2"
+    "commander": "^12.1.0",
+    "open": "^11.0.0"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
     "@types/node": "^22.13.4",
+    "tsx": "^4.19.2",
     "typescript": "^5.4.0"
   }
 }

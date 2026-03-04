@@ -13,6 +13,8 @@ import { registerContext } from './tools/context.js';
 import { registerCheck } from './tools/check.js';
 import { registerRecap } from './tools/recap.js';
 import { registerKnowledge } from './tools/knowledge.js';
+import { registerCreateProduct } from './tools/create-product.js';
+import { registerCreateFeature } from './tools/create-feature.js';
 
 const server = new McpServer(
   {
@@ -47,6 +49,8 @@ registerContext(server);
 registerCheck(server);
 registerRecap(server);
 registerKnowledge(server);
+registerCreateProduct(server);
+registerCreateFeature(server);
 
 // Connect via stdio transport
 async function main() {

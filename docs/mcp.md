@@ -19,16 +19,32 @@ Without Lock, AI agents write code in a vacuum. They don't know that your team d
 
 ## Setup
 
-### Claude Code
+### Recommended: via Lock CLI
 
-Add to your project's `.mcp.json` or global MCP config:
+```bash
+lock login          # authenticate (once per machine)
+cd ~/your-project
+lock init           # detects Claude Code/Cursor, configures automatically
+```
+
+`lock init` detects your IDE and offers to:
+- **Claude Code**: write `.mcp.json` + install a `/lock` skill to `.claude/skills/lock.md`
+- **Cursor**: write `.cursor/mcp.json`
+
+Credentials are read from `~/.lock/credentials` (written by `lock login`), so `.mcp.json` contains no secrets and is safe to commit.
+
+Use `lock init --skip-ide` to bypass IDE detection (e.g. in CI).
+
+### Manual: Claude Code
+
+Add to your project's `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@uselock/mcp-server"],
+      "args": ["@uselock/mcp"],
       "env": {
         "LOCK_API_URL": "https://your-lock-instance.com",
         "LOCK_API_KEY": "lk_your_api_key"
@@ -38,16 +54,16 @@ Add to your project's `.mcp.json` or global MCP config:
 }
 ```
 
-### Cursor
+### Manual: Cursor
 
-Add to your Cursor MCP settings:
+Add to `.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "lock": {
       "command": "npx",
-      "args": ["@uselock/mcp-server"],
+      "args": ["@uselock/mcp"],
       "env": {
         "LOCK_API_URL": "https://your-lock-instance.com",
         "LOCK_API_KEY": "lk_your_api_key"
@@ -57,7 +73,13 @@ Add to your Cursor MCP settings:
 }
 ```
 
-### Environment Variables
+### Credentials
+
+The MCP server resolves credentials in this order:
+
+1. **Environment variables** (`LOCK_API_URL`, `LOCK_API_KEY`) — highest priority
+2. **`~/.lock/credentials`** — JSON file written by `lock login`
+3. **Defaults** — `http://localhost:3000`, no key
 
 | Variable | Description | Default |
 |----------|-------------|---------|

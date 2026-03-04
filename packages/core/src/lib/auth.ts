@@ -18,14 +18,34 @@ function timingSafeCompare(a: string, b: string): boolean {
 declare module 'fastify' {
   interface FastifyRequest {
     workspaceId: string;
+    userId?: string;
+    userRole?: string;
   }
+}
+
+/**
+ * Auth strategy function. Return true if auth was handled (success or failure).
+ * Return false to fall through to the next strategy.
+ */
+export type AuthStrategy = (request: FastifyRequest, reply: FastifyReply) => Promise<boolean>;
+
+const authStrategies: AuthStrategy[] = [];
+
+/** Register an additional auth strategy (e.g., session cookies, JWT). Called by SaaS plugin. */
+export function registerAuthStrategy(strategy: AuthStrategy): void {
+  authStrategies.push(strategy);
+}
+
+/** Clear all registered auth strategies (useful for testing). */
+export function clearAuthStrategies(): void {
+  authStrategies.length = 0;
 }
 
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  // Internal service-to-service auth
+  // 1. Internal service-to-service auth
   const internalSecret = request.headers['x-internal-secret'] as string | undefined;
   const expectedSecret = process.env.INTERNAL_SECRET;
   if (internalSecret && expectedSecret && timingSafeCompare(internalSecret, expectedSecret)) {
@@ -50,7 +70,13 @@ export async function authMiddleware(
     });
   }
 
-  // Bearer token auth
+  // 2. Registered auth strategies (e.g., session cookies, JWT from SaaS plugin)
+  for (const strategy of authStrategies) {
+    const handled = await strategy(request, reply);
+    if (handled) return;
+  }
+
+  // 3. Bearer token auth (API key)
   const authHeader = request.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return reply.status(401).send({
@@ -59,6 +85,8 @@ export async function authMiddleware(
   }
 
   const token = authHeader.slice(7);
+
+  // API key auth (lk_ prefix)
   const keyHash = crypto.createHash('sha256').update(token).digest('hex');
 
   const key = await db.query.apiKeys.findFirst({

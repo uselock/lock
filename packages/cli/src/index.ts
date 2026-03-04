@@ -43,6 +43,14 @@ program.addCommand(loginCommand);
 program.addCommand(logoutCommand);
 program.addCommand(whoamiCommand);
 
+// SaaS-only commands (gracefully skipped in open-source distribution)
+try {
+  const { signupCommand } = await import('./commands/signup.js');
+  program.addCommand(signupCommand);
+} catch {
+  // signup not available in open-source distribution
+}
+
 // Default action: if the first argument doesn't match a known subcommand,
 // treat it as a shorthand for `lock commit "message"`.
 // We detect this by checking if argv[2] exists and is not a registered command or flag.

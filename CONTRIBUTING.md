@@ -5,7 +5,7 @@ Thanks for your interest in contributing to Lock! This document covers the basic
 ## Development setup
 
 ```bash
-git clone https://github.com/uselock/lock.git
+git clone https://github.com/GuitareCiel/lock.git
 cd lock
 pnpm install
 cp .env.example .env   # Edit with your API keys

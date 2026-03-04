@@ -1,6 +1,6 @@
 {
   "name": "@uselock/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for Lock — give AI agents access to product decisions",
   "license": "MIT",
   "type": "module",

@@ -3,11 +3,11 @@
 Decision tracking for product teams. Records product decisions where they happen — Slack, terminal, or AI agent sessions — so you always know why something was built a certain way.
 
 ```
-@lock Use notional value instead of margin for position display --scope major --type technical
+@lock Use notional value instead of margin for position display
 ```
 
 ```
-$ lock "Use notional value instead of margin for position display" --scope major
+$ lock "Use notional value instead of margin for position display"
 ```
 
 Lock captures the decision, classifies its type, detects conflicts with existing decisions, and notifies the team in Slack. If a conflict is found, the user is warned and asked to confirm before committing.
@@ -45,7 +45,7 @@ The fastest way to run Lock. Requires Docker.
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/uselock/lock.git
+git clone https://github.com/GuitareCiel/lock.git
 cd lock
 cp .env.example .env
 ```
@@ -108,7 +108,7 @@ Optional:
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/uselock/lock.git
+git clone https://github.com/GuitareCiel/lock.git
 cd lock
 pnpm install
 ```
@@ -196,25 +196,17 @@ You can create a Slack app using the included manifest file (`slack-app-manifest
 
 | Command | Description |
 |---------|-------------|
-| `@lock <message>` | Commit a decision directly |
-| `@lock <message> --scope major` | Commit with scope (minor/major/architectural) |
-| `@lock <message> --type technical` | Commit with explicit type |
-| `@lock this` / `@lock that` | Extract decision from thread (requires thread) |
-| `@lock the fact that <message>` | Polish mode — LLM cleans up your phrasing |
-| `@lock init --product <p> --feature <f>` | Link channel to product + feature |
-| `@lock log` | List recent decisions |
-| `@lock log --type technical` | Filter by decision type |
-| `@lock recap` | Summary of active decisions with stats |
-| `@lock recap --since 30d` | Recap over a time period |
-| `@lock search "<query>"` | Semantic search |
-| `@lock import --days 7` | Scan channel history for decisions |
-| `@lock digest --schedule weekly --hour 9` | Schedule automated recaps |
+| `@lock <message>` | Record a decision |
+| `@lock this` | Extract a decision from a thread |
+| `@lock init --product <p> --feature <f>` | Set up a channel |
+| `@lock log` | Recent decisions |
+| `@lock search "<query>"` | Find decisions |
+| `@lock recap` | Summary of active decisions |
 | `@lock revert <id> "reason"` | Revert a decision |
-| `@lock link <id> <ref>` | Add external link (Jira, Figma, etc.) |
 | `@lock products` | List products |
 | `@lock features` | List features |
 
-After committing, each lock message includes enrichment buttons: scope dropdown, Add Jira, Add Figma, Add Tags.
+After committing, each lock message includes buttons for adding scope, Jira tickets, Figma links, and tags. See the [full command reference](docs/slack.md) for all commands and flags.
 
 ## CLI setup
 
@@ -252,7 +244,9 @@ cd ~/your-project
 lock init --product trading --feature margin-rework
 ```
 
-This creates `.lock/config.json` in the current directory. Now you can commit decisions:
+This creates `.lock/config.json` in the current directory. If Claude Code or Cursor is detected, it also offers to configure the MCP server and install a decision protocol skill. Use `--skip-ide` to bypass IDE setup.
+
+Now you can commit decisions:
 
 ```bash
 lock "Use notional value instead of margin for position display"
@@ -284,9 +278,21 @@ lock export             # generates LOCK.md with all active decisions
 
 ## MCP server setup (for AI agents)
 
-The MCP server lets AI coding tools read and write decisions. Add it to your tool's MCP config.
+The MCP server lets AI coding tools read and write decisions.
 
-**Claude Code** (`~/.claude.json` or project `.mcp.json`):
+### Recommended: via `lock init`
+
+```bash
+lock login          # authenticate (once per machine)
+cd ~/your-project
+lock init           # detects Claude Code/Cursor, configures automatically
+```
+
+`lock init` writes `.mcp.json` (Claude Code) or `.cursor/mcp.json` (Cursor) with no secrets — credentials are read from `~/.lock/credentials`.
+
+### Manual
+
+Add to `.mcp.json` (Claude Code) or `.cursor/mcp.json` (Cursor):
 
 ```json
 {
@@ -333,7 +339,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: uselock/lock/actions/check-decisions@main
+      - uses: GuitareCiel/lock/actions/check-decisions@main
         with:
           lock-api-url: ${{ secrets.LOCK_API_URL }}
           lock-api-key: ${{ secrets.LOCK_API_KEY }}
