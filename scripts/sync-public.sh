@@ -29,6 +29,12 @@ rsync -av --delete \
   "$SOURCE/" "$TARGET/"
 
 echo ""
+echo "Stripping private sections from CLAUDE.md..."
+# Remove the "Repo Structure: Open-Source Core + Private SaaS" section
+# It sits between two "---" markers after the project intro
+sed -i.bak '/^## ⚠️ Repo Structure/,/^---$/d' "$TARGET/CLAUDE.md"
+rm -f "$TARGET/CLAUDE.md.bak"
+
 echo "Verifying no SaaS imports leaked..."
 
 LEAKED=0
@@ -41,11 +47,16 @@ for pattern in "billing-service" "user-service" "email-service" "usage-service" 
   fi
 done
 
+if grep -q "private monorepo\|packages/saas\|packages/web\|lock-private\|sync-public" "$TARGET/CLAUDE.md" 2>/dev/null; then
+  echo "  WARNING: CLAUDE.md still contains private references"
+  LEAKED=1
+fi
+
 if [ "$LEAKED" -eq 0 ]; then
-  echo "  No SaaS imports found in core. Clean!"
+  echo "  No SaaS imports or private references found. Clean!"
 else
   echo ""
-  echo "  Some SaaS references found in core — these should be removed before publishing."
+  echo "  Some SaaS/private references found — these should be removed before publishing."
 fi
 
 echo ""
