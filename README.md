@@ -45,7 +45,7 @@ The fastest way to run Lock. Requires Docker.
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/GuitareCiel/lock.git
+git clone https://github.com/uselock/lock.git
 cd lock
 cp .env.example .env
 ```
@@ -108,7 +108,7 @@ Optional:
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/GuitareCiel/lock.git
+git clone https://github.com/uselock/lock.git
 cd lock
 pnpm install
 ```
@@ -339,7 +339,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: GuitareCiel/lock/actions/check-decisions@main
+      - uses: uselock/lock/actions/check-decisions@main
         with:
           lock-api-url: ${{ secrets.LOCK_API_URL }}
           lock-api-key: ${{ secrets.LOCK_API_KEY }}

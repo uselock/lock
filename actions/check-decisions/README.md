@@ -15,7 +15,7 @@ jobs:
   check-decisions:
     runs-on: ubuntu-latest
     steps:
-      - uses: GuitareCiel/lock/actions/check-decisions@main
+      - uses: uselock/lock/actions/check-decisions@main
         with:
           lock-api-url: ${{ secrets.LOCK_API_URL }}
           lock-api-key: ${{ secrets.LOCK_API_KEY }}

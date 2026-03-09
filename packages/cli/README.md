@@ -1,6 +1,6 @@
 # @uselock/cli
 
-CLI for [Lock](https://github.com/GuitareCiel/lock) — track product decisions where they happen.
+CLI for [Lock](https://github.com/uselock/lock) — track product decisions where they happen.
 
 Lock captures product decisions ("let's use notional value instead of margin here") with full context, so your team always knows why something was built a certain way.
 
@@ -41,7 +41,7 @@ lock export --product trading --output LOCK.md
 
 ## Documentation
 
-Full documentation: [github.com/GuitareCiel/lock/tree/main/docs/cli.md](https://github.com/GuitareCiel/lock/tree/main/docs/cli.md)
+Full documentation: [github.com/uselock/lock/tree/main/docs/cli.md](https://github.com/uselock/lock/tree/main/docs/cli.md)
 
 ## License
 

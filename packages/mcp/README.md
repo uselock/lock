@@ -1,6 +1,6 @@
 # @uselock/mcp
 
-MCP server for [Lock](https://github.com/GuitareCiel/lock) — give AI agents access to product decisions.
+MCP server for [Lock](https://github.com/uselock/lock) — give AI agents access to product decisions.
 
 Lock captures product decisions with full context. This MCP server lets AI coding agents query and record decisions during development sessions.
 
@@ -39,7 +39,7 @@ Add to your Claude Code or Cursor MCP config:
 
 ## Documentation
 
-Full documentation: [github.com/GuitareCiel/lock/tree/main/docs/mcp.md](https://github.com/GuitareCiel/lock/tree/main/docs/mcp.md)
+Full documentation: [github.com/uselock/lock/tree/main/docs/mcp.md](https://github.com/uselock/lock/tree/main/docs/mcp.md)
 
 ## License
 
