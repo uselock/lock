@@ -7,6 +7,7 @@ import { notifySlack } from './notify-service.js';
 import { updateKnowledgeIncremental } from './knowledge-service.js';
 import { inferDecisionType } from '../lib/llm.js';
 import { runBeforeCommitHooks, runAfterCommitHooks } from '../lib/hooks.js';
+import { shouldRunConflictDetection, shouldRunKnowledgeSynthesis, runBeforeCreateProductHooks, shouldUseFullSearch } from '../lib/hooks.js';
 import type {
   CreateLockRequest,
   RevertLockRequest,
@@ -23,6 +24,7 @@ async function upsertProduct(workspaceId: string, slug: string) {
     where: and(eq(products.workspaceId, workspaceId), eq(products.slug, slug)),
   });
   if (!product) {
+    await runBeforeCreateProductHooks(workspaceId);
     const name = slug
       .split('-')
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -118,15 +120,18 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
   }
 
   // Run conflict detection + type inference in parallel
+  const shouldDetectConflicts = await shouldRunConflictDetection(workspaceId);
   const [conflictResult, typeResult] = await Promise.all([
-    detectConflicts(
-      lock.id,
-      product.id,
-      req.message,
-      req.scope ?? 'minor',
-      req.source.context ?? null,
-      feature.name
-    ),
+    shouldDetectConflicts
+      ? detectConflicts(
+          lock.id,
+          product.id,
+          req.message,
+          req.scope ?? 'minor',
+          req.source.context ?? null,
+          feature.name
+        )
+      : Promise.resolve({ conflicts: [] as any[], supersession: { detected: false as const, supersedes: null } }),
     req.decision_type
       ? Promise.resolve({ decision_type: req.decision_type, confidence: 1 })
       : inferDecisionType(req.message, req.source.context, req.product, req.feature),
@@ -179,14 +184,19 @@ export async function commitLock(workspaceId: string, req: CreateLockRequest) {
       authorName: lock.authorName,
       authorSource: lock.authorSource,
       featureId: lock.featureId,
+      workspaceId,
     }).catch(() => {}); // Non-blocking
   }
 
   // Update knowledge (fire-and-forget)
-  updateKnowledgeIncremental(workspaceId, product.id, feature.id, {
-    message: req.message,
-    scope: req.scope ?? 'minor',
-    decisionType: typeResult.decision_type || null,
+  shouldRunKnowledgeSynthesis(workspaceId).then(should => {
+    if (should) {
+      updateKnowledgeIncremental(workspaceId, product.id, feature.id, {
+        message: req.message,
+        scope: req.scope ?? 'minor',
+        decisionType: typeResult.decision_type || null,
+      }).catch(() => {});
+    }
   }).catch(() => {});
 
   // Fetch links for response
@@ -520,38 +530,42 @@ export async function searchLocks(workspaceId: string, req: SearchLocksRequest) 
   const where = and(...conditions);
 
   // Try semantic search first if we have an embedding
-  const { generateEmbedding } = await import('../lib/embeddings.js');
-  const queryEmbedding = await generateEmbedding(req.query);
+  const useFullSearch = await shouldUseFullSearch(workspaceId);
 
-  if (queryEmbedding) {
-    const vectorStr = `[${queryEmbedding.join(',')}]`;
-    const results = await db.execute(
-      sql`SELECT l.*, 1 - (l.embedding <=> ${vectorStr}::vector) as similarity,
-                 p.slug as product_slug, p.name as product_name,
-                 f.slug as feature_slug, f.name as feature_name
-          FROM locks l
-          JOIN products p ON p.id = l.product_id
-          JOIN features f ON f.id = l.feature_id
-          WHERE l.workspace_id = ${workspaceId}::uuid
-            AND l.status = 'active'
-            AND l.embedding IS NOT NULL
-          ORDER BY l.embedding <=> ${vectorStr}::vector
-          LIMIT 10`
-    );
+  if (useFullSearch) {
+    const { generateEmbedding } = await import('../lib/embeddings.js');
+    const queryEmbedding = await generateEmbedding(req.query);
 
-    return {
-      locks: (results.rows as any[]).map((r) => ({
-        short_id: r.short_id,
-        message: r.message,
-        product: { slug: r.product_slug, name: r.product_name },
-        feature: { slug: r.feature_slug, name: r.feature_name },
-        scope: r.scope,
-        status: r.status,
-        decision_type: r.decision_type,
-        similarity: r.similarity,
-        created_at: r.created_at,
-      })),
-    };
+    if (queryEmbedding) {
+      const vectorStr = `[${queryEmbedding.join(',')}]`;
+      const results = await db.execute(
+        sql`SELECT l.*, 1 - (l.embedding <=> ${vectorStr}::vector) as similarity,
+                   p.slug as product_slug, p.name as product_name,
+                   f.slug as feature_slug, f.name as feature_name
+            FROM locks l
+            JOIN products p ON p.id = l.product_id
+            JOIN features f ON f.id = l.feature_id
+            WHERE l.workspace_id = ${workspaceId}::uuid
+              AND l.status = 'active'
+              AND l.embedding IS NOT NULL
+            ORDER BY l.embedding <=> ${vectorStr}::vector
+            LIMIT 10`
+      );
+
+      return {
+        locks: (results.rows as any[]).map((r) => ({
+          short_id: r.short_id,
+          message: r.message,
+          product: { slug: r.product_slug, name: r.product_name },
+          feature: { slug: r.feature_slug, name: r.feature_name },
+          scope: r.scope,
+          status: r.status,
+          decision_type: r.decision_type,
+          similarity: r.similarity,
+          created_at: r.created_at,
+        })),
+      };
+    }
   }
 
   // Fallback: text search with ILIKE

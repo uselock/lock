@@ -70,6 +70,9 @@ COPY --from=build /app/packages/saas/dist ./packages/saas/dist
 COPY packages/core/src/db/schema.ts packages/core/src/db/
 COPY packages/core/drizzle.config.ts packages/core/
 
+COPY packages/saas/src/db/schema.ts packages/saas/src/db/
+COPY packages/saas/drizzle.config.ts packages/saas/
+
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY scripts/init-db.sql /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint.sh

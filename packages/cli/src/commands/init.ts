@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { select, input, confirm } from '@inquirer/prompts';
@@ -40,10 +41,28 @@ You are about to record one or more product decisions using Lock.
 - When you agree on an approach that represents a product or technical choice
 `;
 
-const MCP_SERVER_CONFIG = {
-  command: 'npx',
-  args: ['@uselock/mcp'],
-};
+function getMcpServerConfig(): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    command: 'npx',
+    args: ['@uselock/mcp'],
+  };
+
+  // Read the user's configured API URL from ~/.lock/credentials
+  // If it's not the default SaaS URL, inject it into the MCP config
+  // so self-hosted users don't need to set env vars separately
+  try {
+    const raw = fs.readFileSync(path.join(os.homedir(), '.lock', 'credentials'), 'utf-8');
+    const creds = JSON.parse(raw);
+    const apiUrl = creds.api_url;
+    if (apiUrl && apiUrl !== 'https://api.uselock.ai') {
+      config.env = { LOCK_API_URL: apiUrl };
+    }
+  } catch {
+    // No credentials file — use defaults
+  }
+
+  return config;
+}
 
 export const initCommand = new Command('init')
   .description('Initialize this directory with a product and feature scope')
@@ -200,14 +219,16 @@ async function setupIde(): Promise<void> {
   ];
 
   for (const ide of ides) {
-    if (!fs.existsSync(path.join(cwd, ide.markerDir))) continue;
+    const detected = fs.existsSync(path.join(cwd, ide.markerDir));
 
     console.log('');
-    console.log(`${chalk.blue(ide.name)} detected.`);
+    if (detected) {
+      console.log(`${chalk.blue(ide.name)} detected.`);
+    }
 
     const shouldSetup = await confirm({
       message: `Set up Lock for ${ide.name}?`,
-      default: true,
+      default: detected,
     });
 
     if (!shouldSetup) continue;
@@ -238,7 +259,7 @@ function writeMcpConfig(filePath: string): void {
     config.mcpServers = {};
   }
 
-  config.mcpServers.lock = MCP_SERVER_CONFIG;
+  config.mcpServers.lock = getMcpServerConfig();
 
   fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
 }

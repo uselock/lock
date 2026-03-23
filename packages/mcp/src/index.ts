@@ -33,6 +33,10 @@ const server = new McpServer(
       '',
       'What counts as a decision: choosing between approaches, establishing conventions, setting constraints, changing or reversing a previous decision.',
       'What is NOT a decision: bug fixes, refactors, routine implementation, variable naming.',
+      '',
+      'When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.',
+      '',
+      'Bootstrap: If no products exist yet, use lock_create_product to create one. Use lock_create_feature to add features within a product.',
     ].join('\n'),
   },
 );

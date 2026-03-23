@@ -23,7 +23,7 @@ export async function getCredentials(): Promise<Credentials> {
 
   const api_url = await input({
     message: 'Lock API URL:',
-    default: 'https://api.uselock.dev',
+    default: 'https://api.uselock.ai',
   });
 
   const api_key = await password({

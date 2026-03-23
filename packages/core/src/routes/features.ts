@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { features, products } from '../db/schema.js';
+import { getPostHog } from '../lib/posthog.js';
 
 export async function featureRoutes(fastify: FastifyInstance) {
   // List features (optionally filtered by product)
@@ -116,6 +117,11 @@ export async function featureRoutes(fastify: FastifyInstance) {
       .values({ productId: prod.id, slug, name, description })
       .returning();
 
+    getPostHog()?.capture({
+      distinctId: request.workspaceId,
+      event: 'feature_created',
+      properties: { slug: feature.slug, name: feature.name, product: prod.slug },
+    });
     return reply.status(201).send({
       data: {
         slug: feature.slug,

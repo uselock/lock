@@ -3,7 +3,7 @@ import { db } from '../db/client.js';
 import { workspaces, locks, products } from '../db/schema.js';
 import { count } from 'drizzle-orm';
 
-const TELEMETRY_URL = process.env.LOCK_TELEMETRY_URL ?? 'https://telemetry.uselock.dev/v1/ping';
+const TELEMETRY_URL = process.env.LOCK_TELEMETRY_URL ?? 'https://telemetry.uselock.ai/v1/ping';
 const HEARTBEAT_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
 let installId: string | null = null;

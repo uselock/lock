@@ -2,10 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { products, locks } from '../db/schema.js';
+import { getPostHog } from '../lib/posthog.js';
 
 export async function productRoutes(fastify: FastifyInstance) {
   // List products with lock counts
   fastify.get('/', async (request) => {
+    if (!request.workspaceId) {
+      return { data: { products: [] } };
+    }
     const rows = await db
       .select({
         id: products.id,
@@ -33,6 +37,11 @@ export async function productRoutes(fastify: FastifyInstance) {
 
   // Create product
   fastify.post('/', async (request, reply) => {
+    if (!request.workspaceId) {
+      return reply.status(401).send({
+        error: { code: 'NO_WORKSPACE', message: 'No workspace selected' },
+      });
+    }
     const { slug, name, description } = request.body as {
       slug: string;
       name: string;
@@ -59,6 +68,11 @@ export async function productRoutes(fastify: FastifyInstance) {
       .values({ workspaceId: request.workspaceId, slug, name, description })
       .returning();
 
+    getPostHog()?.capture({
+      distinctId: request.workspaceId,
+      event: 'product_created',
+      properties: { slug: product.slug, name: product.name },
+    });
     return reply.status(201).send({
       data: {
         slug: product.slug,

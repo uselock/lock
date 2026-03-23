@@ -20,6 +20,7 @@ import type {
   ListLocksQuery,
 } from '../types.js';
 import { VALID_DECISION_TYPES } from '../types.js';
+import { getPostHog } from '../lib/posthog.js';
 
 export async function lockRoutes(fastify: FastifyInstance) {
   // Commit a new lock
@@ -34,6 +35,19 @@ export async function lockRoutes(fastify: FastifyInstance) {
 
     try {
       const result = await commitLock(request.workspaceId, body);
+      getPostHog()?.capture({
+        distinctId: request.workspaceId,
+        event: 'lock_committed',
+        properties: {
+          product: body.product,
+          feature: body.feature ?? 'main',
+          scope: body.scope ?? 'minor',
+          source: body.source?.type,
+          author_type: body.author?.type,
+          has_conflicts: (result.conflicts?.length ?? 0) > 0,
+          supersession_detected: result.supersession?.detected ?? false,
+        },
+      });
       return reply.status(201).send({ data: result });
     } catch (err: any) {
       request.log.error(err);
@@ -64,6 +78,16 @@ export async function lockRoutes(fastify: FastifyInstance) {
 
     try {
       const result = await extractFromThread(body);
+      getPostHog()?.capture({
+        distinctId: request.workspaceId,
+        event: 'lock_extracted',
+        properties: {
+          has_hint: !!body.user_hint,
+          product: body.product,
+          feature: body.feature,
+          confidence: result.confidence,
+        },
+      });
       return { data: result };
     } catch (err: any) {
       request.log.error(err);
@@ -77,6 +101,15 @@ export async function lockRoutes(fastify: FastifyInstance) {
   fastify.post('/search', llmRateLimit, async (request) => {
     const body = request.body as SearchLocksRequest;
     const result = await searchLocks(request.workspaceId, body);
+    getPostHog()?.capture({
+      distinctId: request.workspaceId,
+      event: 'lock_searched',
+      properties: {
+        product: body.product,
+        feature: body.feature,
+        result_count: result.locks?.length ?? 0,
+      },
+    });
     return { data: result };
   });
 
@@ -218,6 +251,14 @@ export async function lockRoutes(fastify: FastifyInstance) {
           error: { code: 'LOCK_NOT_FOUND', message: `Lock "${shortId}" not found` },
         });
       }
+      getPostHog()?.capture({
+        distinctId: request.workspaceId,
+        event: 'lock_reverted',
+        properties: {
+          short_id: shortId,
+          author_type: body.author?.type,
+        },
+      });
       return { data: result };
     } catch (err: any) {
       return reply.status(400).send({
@@ -244,6 +285,14 @@ export async function lockRoutes(fastify: FastifyInstance) {
       });
     }
 
+    getPostHog()?.capture({
+      distinctId: request.workspaceId,
+      event: 'lock_link_added',
+      properties: {
+        short_id: shortId,
+        link_type: body.link_type,
+      },
+    });
     return reply.status(201).send({ data: { link: result } });
   });
 }

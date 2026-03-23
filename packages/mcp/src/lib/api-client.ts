@@ -26,7 +26,7 @@ function getConfig(): { apiUrl: string; apiKey: string; accessToken: string; wor
   }
 
   _config = {
-    apiUrl: envUrl ?? fileCreds.api_url ?? 'https://api.uselock.dev',
+    apiUrl: envUrl ?? fileCreds.api_url ?? 'https://api.uselock.ai',
     apiKey: envKey ?? fileCreds.api_key ?? '',
     accessToken: fileCreds.access_token ?? '',
     workspaceId: fileCreds.workspace_id ?? '',
@@ -54,43 +54,74 @@ function headers(): Record<string, string> {
   return hdrs;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const url = `${getConfig().apiUrl}${path}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: headers(),
-  });
+function requireAuth(): void {
+  const { apiKey, accessToken } = getConfig();
+  if (!apiKey && !accessToken) {
+    throw new Error(
+      'No Lock credentials found. Run `lock login` in your terminal to authenticate, ' +
+      'or set LOCK_API_URL and LOCK_API_KEY environment variables in your MCP config.',
+    );
+  }
+}
+
+function handleResponse<T>(response: Response, method: string, path: string): Promise<T> {
+  if (response.status === 401) {
+    throw new Error(
+      'Lock authentication failed. Your API key or token may be expired. ' +
+      'Run `lock login` to re-authenticate.',
+    );
+  }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`API GET ${path} failed (${response.status}): ${body}`);
+    return response.text().then((body) => {
+      throw new Error(`API ${method} ${path} failed (${response.status}): ${body}`);
+    });
   }
 
-  const json = (await response.json()) as ApiResponse<T>;
-  if (json.error) {
-    throw new Error(`API error: ${json.error.code} - ${json.error.message}`);
+  return response.json().then((json: ApiResponse<T>) => {
+    if (json.error) {
+      throw new Error(`API error: ${json.error.code} - ${json.error.message}`);
+    }
+    return json.data as T;
+  });
+}
+
+function connectionError(): Error {
+  return new Error(
+    `Cannot reach Lock API at ${getConfig().apiUrl}. ` +
+    `Is the server running? If self-hosting, check your LOCK_API_URL.`,
+  );
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  requireAuth();
+
+  let response: Response;
+  try {
+    response = await fetch(`${getConfig().apiUrl}${path}`, {
+      method: 'GET',
+      headers: headers(),
+    });
+  } catch {
+    throw connectionError();
   }
 
-  return json.data as T;
+  return handleResponse<T>(response, 'GET', path);
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const url = `${getConfig().apiUrl}${path}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  });
+  requireAuth();
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`API POST ${path} failed (${response.status}): ${text}`);
+  let response: Response;
+  try {
+    response = await fetch(`${getConfig().apiUrl}${path}`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw connectionError();
   }
 
-  const json = (await response.json()) as ApiResponse<T>;
-  if (json.error) {
-    throw new Error(`API error: ${json.error.code} - ${json.error.message}`);
-  }
-
-  return json.data as T;
+  return handleResponse<T>(response, 'POST', path);
 }

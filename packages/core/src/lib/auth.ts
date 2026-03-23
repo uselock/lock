@@ -49,7 +49,13 @@ export async function authMiddleware(
   const internalSecret = request.headers['x-internal-secret'] as string | undefined;
   const expectedSecret = process.env.INTERNAL_SECRET;
   if (internalSecret && expectedSecret && timingSafeCompare(internalSecret, expectedSecret)) {
-    // Resolve workspace from Slack team ID header
+    // Resolve workspace from direct workspace ID (SaaS services) or Slack team ID (Slack bot)
+    const workspaceId = request.headers['x-workspace-id'] as string | undefined;
+    if (workspaceId) {
+      request.workspaceId = workspaceId;
+      return;
+    }
+
     const teamId = request.headers['x-workspace-team-id'] as string | undefined;
     if (teamId) {
       let workspace = await db.query.workspaces.findFirst({
@@ -66,7 +72,7 @@ export async function authMiddleware(
       return;
     }
     return reply.status(400).send({
-      error: { code: 'MISSING_TEAM_ID', message: 'X-Workspace-Team-Id header required for internal auth' },
+      error: { code: 'MISSING_WORKSPACE', message: 'X-Workspace-Id or X-Workspace-Team-Id header required for internal auth' },
     });
   }
 

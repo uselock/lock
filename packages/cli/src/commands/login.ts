@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { select, input, password, confirm } from '@inquirer/prompts';
 import { credentialsExist, getCredentials, saveCredentials } from '../lib/credentials.js';
 
-const DEFAULT_API_URL = 'https://api.uselock.dev';
+const DEFAULT_API_URL = 'https://api.uselock.ai';
 
 async function apiKeyLogin(url: string, key: string): Promise<void> {
   console.log(chalk.dim('Validating credentials...'));

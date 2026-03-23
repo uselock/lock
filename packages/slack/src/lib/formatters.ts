@@ -42,6 +42,12 @@ function buildEnrichmentActions(shortId: string, currentScope: string): any {
       },
       {
         type: 'button',
+        action_id: 'add_link_linear',
+        text: { type: 'plain_text', text: 'Add Linear' },
+        value: shortId,
+      },
+      {
+        type: 'button',
         action_id: 'add_tags',
         text: { type: 'plain_text', text: 'Add tags' },
         value: shortId,

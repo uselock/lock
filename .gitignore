@@ -14,5 +14,11 @@ docs/website-brief.md
 docs/docs-update-instructions.md
 ROADMAP.md
 
+# PostHog
+.posthog-events.json
+
+# npm lock files (we use pnpm)
+package-lock.json
+
 # Next.js
 .next/

@@ -5,11 +5,11 @@ export interface LockAuthor {
   type: 'human' | 'agent';
   id: string;
   name: string;
-  source: 'slack' | 'cli' | 'mcp' | 'api';
+  source: 'slack' | 'cli' | 'mcp' | 'api' | 'linear';
 }
 
 export interface LockSource {
-  type: 'slack' | 'cli' | 'agent_session' | 'api';
+  type: 'slack' | 'cli' | 'agent_session' | 'api' | 'linear';
   ref?: string;
   context?: string;
   participants?: string[];

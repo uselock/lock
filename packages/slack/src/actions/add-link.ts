@@ -14,6 +14,11 @@ export function registerAddLink(app: any, callApi: Function) {
     await openLinkModal(client, body.trigger_id, action.value, 'figma', 'Add Figma Link', 'e.g. https://figma.com/...', body.team?.id || '');
   });
 
+  app.action('add_link_linear', async ({ action, ack, body, client }: any) => {
+    await ack();
+    await openLinkModal(client, body.trigger_id, action.value, 'linear', 'Add Linear Issue', 'e.g. ENG-42 or https://linear.app/...', body.team?.id || '');
+  });
+
   // Handle modal submission
   app.view('add_link_submit', async ({ ack, view }: any) => {
     await ack();
