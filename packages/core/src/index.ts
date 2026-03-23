@@ -30,7 +30,6 @@ if (isEntryPoint) {
 }
 
 // Public API exports (used by @uselock/saas and other consumers)
-export { getPostHog, shutdownPostHog } from './lib/posthog.js';
 export { buildApp } from './app.js';
 export type { BuildAppOptions } from './app.js';
 export { db, pool } from './db/client.js';
@@ -44,5 +43,6 @@ export {
   registerKnowledgeSynthesisGate, shouldRunKnowledgeSynthesis,
   registerSearchGate, shouldUseFullSearch,
   registerBeforeCreateProduct, runBeforeCreateProductHooks,
+  registerAnalyticsProvider, trackEvent, captureException, identifyUser,
 } from './lib/hooks.js';
-export type { CommitHookContext } from './lib/hooks.js';
+export type { CommitHookContext, AnalyticsProvider } from './lib/hooks.js';

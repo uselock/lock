@@ -35,11 +35,20 @@ echo "Stripping private sections from CLAUDE.md..."
 sed -i.bak '/^## ⚠️ Repo Structure/,/^---$/d' "$TARGET/CLAUDE.md"
 rm -f "$TARGET/CLAUDE.md.bak"
 
+echo "Stripping SaaS-only variables from .env.example..."
+# Remove SaaS-only sections: Stripe, PostHog, Resend, Google OAuth, Slack OAuth
+sed -i.bak \
+  -e '/^# ── Hosted SaaS/,$ d' \
+  -e '/^# PostHog/,/^$/ d' \
+  -e '/^POSTHOG_/d' \
+  "$TARGET/.env.example"
+rm -f "$TARGET/.env.example.bak"
+
 echo "Verifying no SaaS imports leaked..."
 
 LEAKED=0
 # Check for imports that should only exist in saas package
-for pattern in "billing-service" "user-service" "email-service" "usage-service" "./jwt" "bcryptjs" "stripe" "@fastify/cookie"; do
+for pattern in "billing-service" "user-service" "email-service" "usage-service" "./jwt" "bcryptjs" "stripe" "@fastify/cookie" "posthog-node" "posthog"; do
   # Search for actual imports/requires in core (not comments)
   if grep -rn "import.*$pattern\|require.*$pattern" "$TARGET/packages/core/src/" 2>/dev/null | grep -v "node_modules" | grep -v ".d.ts" > /dev/null 2>&1; then
     echo "  WARNING: Found '$pattern' in core package"

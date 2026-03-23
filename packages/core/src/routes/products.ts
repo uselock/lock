@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { products, locks } from '../db/schema.js';
-import { getPostHog } from '../lib/posthog.js';
+import { trackEvent } from '../lib/hooks.js';
 
 export async function productRoutes(fastify: FastifyInstance) {
   // List products with lock counts
@@ -68,11 +68,7 @@ export async function productRoutes(fastify: FastifyInstance) {
       .values({ workspaceId: request.workspaceId, slug, name, description })
       .returning();
 
-    getPostHog()?.capture({
-      distinctId: request.workspaceId,
-      event: 'product_created',
-      properties: { slug: product.slug, name: product.name },
-    });
+    trackEvent(request.workspaceId, 'product_created', { slug: product.slug, name: product.name });
     return reply.status(201).send({
       data: {
         slug: product.slug,

@@ -8,7 +8,7 @@ import { featureRoutes } from './routes/features.js';
 import { channelConfigRoutes } from './routes/channel-configs.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { authMiddleware } from './lib/auth.js';
-import { getPostHog } from './lib/posthog.js';
+import { captureException } from './lib/hooks.js';
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -99,7 +99,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   fastify.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     request.log.error(error);
     if (!error.statusCode || error.statusCode >= 500) {
-      getPostHog()?.captureException(error, request.workspaceId);
+      captureException(error, request.workspaceId);
     }
     reply.status(error.statusCode ?? 500).send({
       error: {

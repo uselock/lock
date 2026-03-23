@@ -128,6 +128,36 @@ export async function runBeforeCreateProductHooks(workspaceId: string): Promise<
   }
 }
 
+// ── Analytics provider (SaaS registers PostHog or similar) ──
+
+export interface AnalyticsProvider {
+  trackEvent(distinctId: string, event: string, properties?: Record<string, any>): void;
+  captureException(error: Error, distinctId?: string): void;
+  identify(distinctId: string, properties?: Record<string, any>): void;
+}
+
+let analyticsProvider: AnalyticsProvider | null = null;
+
+/** Register an analytics provider (e.g., PostHog). Without this, analytics calls are no-ops. */
+export function registerAnalyticsProvider(provider: AnalyticsProvider): void {
+  analyticsProvider = provider;
+}
+
+/** Track an analytics event. No-op if no provider registered. */
+export function trackEvent(distinctId: string, event: string, properties?: Record<string, any>): void {
+  analyticsProvider?.trackEvent(distinctId, event, properties);
+}
+
+/** Capture an exception. No-op if no provider registered. */
+export function captureException(error: Error, distinctId?: string): void {
+  analyticsProvider?.captureException(error, distinctId);
+}
+
+/** Identify a user. No-op if no provider registered. */
+export function identifyUser(distinctId: string, properties?: Record<string, any>): void {
+  analyticsProvider?.identify(distinctId, properties);
+}
+
 /** Clear all registered hooks (useful for testing). */
 export function clearHooks(): void {
   beforeCommitHooks.length = 0;
@@ -137,4 +167,5 @@ export function clearHooks(): void {
   knowledgeSynthesisGate = null;
   searchGate = null;
   beforeCreateProductHooks.length = 0;
+  analyticsProvider = null;
 }
