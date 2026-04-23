@@ -1,6 +1,9 @@
 # Lock
 
-Decision tracking for product teams. Records product decisions where they happen — Slack, terminal, or AI agent sessions — so you always know why something was built a certain way.
+<img width="1920" height="1080" alt="download" src="https://github.com/user-attachments/assets/d80f4d3f-9d7e-461a-b73d-5e1150353783" />
+
+
+Decision protocol layer for Agents. Records product decisions where they happen — Slack, terminal, or AI agent sessions — so you always know why something was built a certain way.
 
 ```
 @lock Use notional value instead of margin for position display
